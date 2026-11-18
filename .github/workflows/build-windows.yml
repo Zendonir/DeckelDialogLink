@@ -1,0 +1,89 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Windows portable build
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,build]"
+
+      - name: Run tests (no serial hardware required)
+        run: pytest -q
+
+      - name: Build with PyInstaller (onedir)
+        run: pyinstaller --noconfirm --clean deckellink.spec
+
+      - name: Smoke test of the built executable
+        shell: pwsh
+        run: |
+          $exe = "dist\DeckelLink\DeckelLink.exe"
+          if (-not (Test-Path $exe)) { throw "Executable not found: $exe" }
+          $p = Start-Process -FilePath $exe `
+            -ArgumentList "--smoke-test","--data-dir","$env:RUNNER_TEMP\dl-smoke","--smoke-report","$env:RUNNER_TEMP\smoke.json" `
+            -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\smoke.json"
+          if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
+
+      - name: Determine artifact name
+        id: meta
+        shell: pwsh
+        run: |
+          $version = python -c "from deckellink.version import __version__; print(__version__)"
+          "name=DeckelLink-$version-windows-x64" >> $env:GITHUB_OUTPUT
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE, CHANGELOG.md dist\DeckelLink\
+          Compress-Archive -Path dist\DeckelLink -DestinationPath "${{ steps.meta.outputs.name }}.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}
+          path: ${{ steps.meta.outputs.name }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Release (tags v*)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.zip
+          draft: true
+          generate_release_notes: true
