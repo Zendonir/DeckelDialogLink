@@ -105,7 +105,18 @@ def is_disallowed_control(byte: int) -> bool:
 
 def format_ascii(data: bytes) -> str:
     """Printable ASCII representation with visible control characters."""
-    names = {CR: "<CR>", LF: "<LF>", TAB: "<TAB>", NUL: "<NUL>"}
+    names = {
+        CR: "<CR>",
+        LF: "<LF>",
+        TAB: "<TAB>",
+        NUL: "<NUL>",
+        0x02: "<STX>",
+        0x03: "<ETX>",
+        0x04: "<EOT>",
+        0x05: "<ENQ>",
+        0x10: "<DLE>",
+        0x15: "<NAK>",
+    }
     out = []
     for b in data:
         if b in names:

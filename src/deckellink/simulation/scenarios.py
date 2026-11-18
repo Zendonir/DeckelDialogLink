@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
+from deckellink.domain.models import ProtocolMode
+from deckellink.simulation.lsv2_cnc import Lsv2SimConfig
 from deckellink.transport.simulated_transport import SimulationConfig
 
 SAMPLE_PROGRAM = (
@@ -43,6 +45,9 @@ class Scenario:
     expected_send_state: str | None = None
     expected_receive_state: str | None = None
     auto_cancel_after_bytes: int | None = None
+    protocol: ProtocolMode = ProtocolMode.PLAIN
+    lsv2: Lsv2SimConfig | None = None
+    expected_drip_state: str | None = None
 
 
 def _receive_program(data: bytes, **kwargs: Any) -> SimulationConfig:
@@ -183,6 +188,100 @@ SCENARIOS: tuple[Scenario, ...] = (
         SimulationConfig(write_error_after_bytes=80),
         expected_send_state="failed",
     ),
+    # ---- LSV2 scenarios (only effective with an LSV2 profile) ----------------------
+    Scenario(
+        "lsv2_ok",
+        "LSV2: Erfolgreiche Übertragung",
+        "LSV2-CNC quittiert jedes Telegramm sofort und sendet beim Empfang ein Programm. Nur mit LSV2-Profil wirksam.",
+        ScenarioKind.BOTH,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(program=SAMPLE_PROGRAM),
+        expected_send_state="completed",
+        expected_receive_state="completed",
+        expected_drip_state="completed",
+    ),
+    Scenario(
+        "lsv2_dripfeed",
+        "LSV2: Nachladebetrieb (Puffer 3 Sätze, 0,5 s je Satz)",
+        "Die simulierte CNC arbeitet das Programm ab und quittiert erst, wenn im Satzpuffer "
+        "Platz ist. Nur mit LSV2-Profil wirksam.",
+        ScenarioKind.SEND,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(buffer_telegrams=3, execution_s_per_telegram=0.5),
+        expected_send_state="completed",
+        expected_drip_state="completed",
+    ),
+    Scenario(
+        "lsv2_nak",
+        "LSV2: Prüfsummenfehler / NAK",
+        "Die CNC antwortet auf Telegramm 2 und 5 einmal mit NAK, beim Senden der CNC ist "
+        "Telegramm 3 beschädigt. Die Übertragung muss durch Wiederholung gelingen.",
+        ScenarioKind.BOTH,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(nak_on_telegrams=(2, 5), corrupt_bcc_on_sent_telegrams=(3,), program=SAMPLE_PROGRAM),
+        expected_send_state="completed",
+        expected_receive_state="completed",
+        expected_drip_state="completed",
+    ),
+    Scenario(
+        "lsv2_lost_ack",
+        "LSV2: Quittung geht verloren",
+        "Die Quittung für Telegramm 4 geht verloren; DeckelLink fragt mit ENQ nach, ohne das "
+        "Telegramm doppelt zu senden.",
+        ScenarioKind.SEND,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(drop_ack_on_telegrams=(4,)),
+        expected_send_state="completed",
+        expected_drip_state="completed",
+    ),
+    Scenario(
+        "lsv2_wack",
+        "LSV2: CNC meldet 'Warten' (WACK)",
+        "Die CNC antwortet bei Telegramm 2 und 3 mit WACK; DeckelLink wartet und fragt nach.",
+        ScenarioKind.SEND,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(wack_on_telegrams=(2, 3)),
+        expected_send_state="completed",
+        expected_drip_state="completed",
+    ),
+    Scenario(
+        "lsv2_cnc_abort",
+        "LSV2: CNC bricht ab (EOT)",
+        "Nach Telegramm 5 beendet die CNC die Verbindung mit EOT (z. B. Programmabbruch an der Steuerung).",
+        ScenarioKind.SEND,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(eot_after_telegrams=5),
+        expected_send_state="failed",
+        expected_drip_state="failed",
+    ),
+    Scenario(
+        "lsv2_not_ready",
+        "LSV2: CNC nicht empfangsbereit",
+        "Die CNC beantwortet ENQ nie - Verbindungsaufbau scheitert nach der Wartezeit.",
+        ScenarioKind.SEND,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(never_ready=True),
+        expected_send_state="failed",
+        expected_drip_state="failed",
+    ),
+    Scenario(
+        "lsv2_disconnect",
+        "LSV2: Verbindungsabbruch im Nachladebetrieb",
+        "Nach Telegramm 4 bricht die Verbindung ab.",
+        ScenarioKind.SEND,
+        SimulationConfig(),
+        protocol=ProtocolMode.LSV2,
+        lsv2=Lsv2SimConfig(disconnect_after_telegrams=4, buffer_telegrams=2, execution_s_per_telegram=0.2),
+        expected_send_state="failed",
+        expected_drip_state="failed",
+    ),
 )
 
 SCENARIOS_BY_ID = {s.id: s for s in SCENARIOS}
@@ -191,3 +290,19 @@ DEFAULT_SCENARIO_ID = "send_ok"
 
 def get_scenario(scenario_id: str | None) -> Scenario:
     return SCENARIOS_BY_ID.get(scenario_id or "", SCENARIOS_BY_ID[DEFAULT_SCENARIO_ID])
+
+
+def lsv2_config_for(scenario: Scenario, *, receive: bool = False, drip_feed: bool = False) -> Lsv2SimConfig:
+    """LSV2 simulator settings for any scenario (plain scenarios get sensible LSV2 defaults)."""
+    if scenario.lsv2 is not None:
+        config = scenario.lsv2
+    else:
+        config = Lsv2SimConfig(open_error=scenario.config.open_error)
+        if drip_feed:
+            config = replace(config, buffer_telegrams=4, execution_s_per_telegram=0.2)
+    if receive and not config.program:
+        config = replace(config, program=SAMPLE_PROGRAM)
+    if not receive:
+        # When the PC sends, the simulated CNC is the receiver.
+        config = replace(config, program=b"")
+    return config

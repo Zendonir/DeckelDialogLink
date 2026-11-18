@@ -29,6 +29,16 @@ Zu jedem Fehler zeigt DeckelLink eine verständliche Meldung mit möglichen Ursa
 - Endet zu früh: Steuerung macht Pausen > Inaktivitätszeit → Inaktivitäts-Timeout erhöhen.
 - „Maximale Empfangsgröße überschritten" → Limit im Profil erhöhen (0 = unbegrenzt, nicht empfohlen).
 
+## LSV2 / Nachladebetrieb
+| Meldung | Ursachen / Abhilfe |
+|---|---|
+| „CNC hat die LSV2-Verbindung nicht angenommen (keine Quittung DLE 0 auf ENQ)" | CNC nicht im Empfangs-/Nachladebetrieb; Steuerung erwartet kein LSV2; Baudrate/Parität falsch. Im Terminal prüfen, ob überhaupt Zeichen zurückkommen. |
+| „… nach mehreren Wiederholungen abgebrochen (NAK)" | BCC-Bildung oder Rahmung (transparent/einfach) passt nicht → Profil *Protokoll* ändern; Parität prüfen. |
+| „CNC hat ein Telegramm nicht quittiert" | Im Nachladebetrieb: Satz dauert länger als das Quittungs-Timeout → Timeout erhöhen. Sonst: CNC angehalten. |
+| „CNC hat die Übertragung beendet: … EOT" | Programm an der Steuerung abgebrochen, Speicher voll, Fehler im Datenstrom. |
+
+Im Terminal erscheinen Steuerzeichen lesbar als `<ENQ>`, `<DLE>`, `<STX>`, `<ETX>`, `<EOT>`, `<NAK>`.
+
 ## Loopback-Test schlägt fehl
 - TX und RX nicht gebrückt; falscher COM-Port; Port belegt.
 - Bei RTS/CTS-Profil zusätzlich RTS–CTS brücken.

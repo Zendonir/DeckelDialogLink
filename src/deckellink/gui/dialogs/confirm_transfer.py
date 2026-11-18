@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from deckellink.gui.style import REAL_BANNER_STYLE, SIMULATION_BANNER_STYLE
-from deckellink.safety import SAFETY_NOTICE, SCOPE_NOTICE
+from deckellink.safety import DRIP_FEED_NOTICE, SAFETY_NOTICE, SCOPE_NOTICE
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,8 @@ class ConfirmInfo:
     applied: tuple[str, ...] = ()
     show_safety_notice: bool = False
     appended_program_end: bool = False
+    protocol: str = ""
+    drip_feed: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,15 @@ class ConfirmTransferDialog(QDialog):
         scope.setWordWrap(True)
         layout.addWidget(scope)
 
+        self.drip_ack = QCheckBox("Ich habe verstanden: Die Maschine muss bei Störungen an der CNC angehalten werden.")
+        self.drip_ack.setVisible(False)
+        if info.drip_feed:
+            drip = QLabel(DRIP_FEED_NOTICE)
+            drip.setWordWrap(True)
+            drip.setStyleSheet("background:#fdecea; border:2px solid #b3261e; padding:8px; font-weight:bold;")
+            layout.addWidget(drip)
+            self.drip_ack.setVisible(True)
+            layout.addWidget(self.drip_ack)
         self.suppress = QCheckBox("Sicherheitshinweis künftig nicht mehr anzeigen")
         self.suppress.setVisible(False)
         if info.show_safety_notice and not info.simulation:
@@ -96,6 +107,8 @@ class ConfirmTransferDialog(QDialog):
             self.suppress.setToolTip("Kann in den Einstellungen wieder aktiviert werden.")
             layout.addWidget(self.suppress)
 
+        if info.protocol:
+            form.addRow("Protokoll:", QLabel(info.protocol))
         buttons = QDialogButtonBox()
         self.start_button = buttons.addButton(
             "Übertragung starten" if not info.simulation else "Simulation starten",
@@ -107,6 +120,10 @@ class ConfirmTransferDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        if info.drip_feed:
+            self.start_button.setText("Nachladebetrieb starten")
+            self.start_button.setEnabled(False)
+            self.drip_ack.toggled.connect(self.start_button.setEnabled)
 
     def outcome(self) -> ConfirmOutcome:
         return ConfirmOutcome(

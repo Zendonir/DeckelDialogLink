@@ -7,6 +7,13 @@ import logging
 from deckellink.domain.errors import ProfileValidationError, UserFacingError, ValidationBlockedError
 from deckellink.nc.transformer import TransformError
 from deckellink.storage.files import FileExistsConflict
+from deckellink.transfer.lsv2 import (
+    CncAbortError,
+    Lsv2AckTimeout,
+    Lsv2Error,
+    Lsv2LinkTimeout,
+    Lsv2RetryExceeded,
+)
 from deckellink.transport.base import (
     ConnectionLostError,
     HandshakeTimeoutError,
@@ -65,6 +72,38 @@ def describe_error(
             "Das gewählte Profil passt nicht zur Handshake-Einstellung der Steuerung.",
             "Der USB-RS-232-Adapter unterstützt die Modemleitungen nicht.",
         )
+    elif isinstance(exc, Lsv2LinkTimeout):
+        title = "Die CNC hat die LSV2-Verbindung nicht angenommen (keine Quittung DLE 0 auf ENQ)."
+        causes = (
+            "Die Steuerung ist nicht im Empfangs- bzw. Nachladebetrieb (an der CNC starten).",
+            "Die Steuerung erwartet kein LSV2-Protokoll (Profil 'ohne Protokoll' verwenden).",
+            "Baudrate, Parität oder Datenbits stimmen nicht - Zeichen werden nicht erkannt.",
+            "Kabel/Adapter: RX/TX vertauscht oder nicht verbunden.",
+        )
+    elif isinstance(exc, Lsv2AckTimeout):
+        title = "Die CNC hat ein Telegramm nicht quittiert."
+        causes = (
+            "Die Steuerung hat den Empfang beendet oder wurde angehalten.",
+            "Im Nachladebetrieb: Quittungs-Timeout kürzer als die Bearbeitungszeit eines Satzes.",
+            "Telegrammaufbau (DLE-Transparenz, BCC) passt nicht zur Steuerung.",
+        )
+    elif isinstance(exc, Lsv2RetryExceeded):
+        title = "LSV2-Übertragung nach mehreren Wiederholungen abgebrochen (NAK)."
+        causes = (
+            "Prüfsumme (BCC) wird von der Steuerung anders gebildet - BCC-Modus im Profil prüfen.",
+            "Störungen auf der Leitung, falsche Parität.",
+            "Telegramm zu lang für die Steuerung.",
+        )
+    elif isinstance(exc, CncAbortError):
+        title = f"Die CNC hat die Übertragung beendet: {exc}"
+        causes = (
+            "Bediener hat an der Steuerung abgebrochen oder das Programm gestoppt.",
+            "Die Steuerung hat einen Fehler im Datenstrom erkannt.",
+            "Speicher der Steuerung voll.",
+        )
+    elif isinstance(exc, Lsv2Error):
+        title = "LSV2-Protokollfehler."
+        causes = (str(exc),)
     elif isinstance(exc, TransportTimeoutError):
         title = "Zeitüberschreitung bei der Übertragung."
         causes = (

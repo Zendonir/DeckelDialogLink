@@ -61,15 +61,18 @@ from deckellink.gui.workers import Job, TaskCallbacks, TaskHandle
 from deckellink.logging.setup import set_level
 from deckellink.nc.analyzer import analyze
 from deckellink.nc.transformer import TransformError, transform
+from deckellink.power import keep_system_awake
 from deckellink.profiles.loader import builtin_profiles_dir
 from deckellink.profiles.repository import ProfileRepository, ProfileRepositoryError
 from deckellink.profiles.schema import parse_profile
-from deckellink.simulation.scenarios import SAMPLE_PROGRAM, Scenario, get_scenario
+from deckellink.simulation.lsv2_cnc import Lsv2SimulatedCnc
+from deckellink.simulation.scenarios import SAMPLE_PROGRAM, Scenario, get_scenario, lsv2_config_for
 from deckellink.storage.archive import ReceiveArchive, StoredReceive, export_copy
 from deckellink.storage.backup import BackupManager
 from deckellink.storage.files import sanitize_stem, unique_path, write_new_file
 from deckellink.storage.paths import AppPaths
 from deckellink.transfer.cancellation import CancellationToken
+from deckellink.transfer.lsv2_transfer import Lsv2ProgramReceiver, Lsv2ProgramSender
 from deckellink.transfer.receiver import ProgramReceiver, ReceiveCallbacks, process_received
 from deckellink.transfer.sender import ProgramSender, SendCallbacks
 from deckellink.transport.base import ModemStatus, Transport
@@ -215,6 +218,7 @@ class MainWindow(QMainWindow):
         tp.check_requested.connect(self.recheck_file)
         tp.sample_requested.connect(self.load_sample)
         tp.send_requested.connect(self.start_send)
+        tp.dripfeed_requested.connect(self.start_drip_feed)
         tp.cancel_requested.connect(self.cancel_task)
         tp.receive_requested.connect(lambda: self.nav.setCurrentRow(1))
         tp.options_changed.connect(self._transfer_options_changed)
@@ -284,11 +288,22 @@ class MainWindow(QMainWindow):
         if self.simulation:
             if purpose == "loopback":
                 return LoopbackTransport(serial, self._clock())
+            if self.profile.protocol.is_lsv2 and purpose in ("send", "receive", "dripfeed"):
+                lsv2_config = lsv2_config_for(
+                    self.scenario(), receive=purpose == "receive", drip_feed=purpose == "dripfeed"
+                )
+                return Lsv2SimulatedCnc(serial, self.profile.protocol, lsv2_config, self._clock())
             config = self.scenario().config
             if purpose == "receive" and not config.machine_program:
                 config = replace(config, machine_program=SAMPLE_PROGRAM)
             return SimulatedTransport(serial, config, self._clock())
         return SerialTransport(self.config.port, serial)
+
+    def _link_summary(self) -> str:
+        summary = self.profile.serial.summary
+        if self.profile.protocol.is_lsv2:
+            summary += " | LSV2"
+        return summary
 
     def _save_config(self) -> None:
         try:
@@ -311,9 +326,9 @@ class MainWindow(QMainWindow):
     def _refresh_all(self) -> None:
         profile = self.profile
         self.header.set_mode(self.simulation, self.config.port)
-        self.header.set_connection(self.port_label, profile.serial.summary)
+        self.header.set_connection(self.port_label, self._link_summary())
         self.header.set_profile(profile.display_name, profile.verification_status is VerificationStatus.VERIFIED)
-        connection = f"{self.port_label} | {profile.serial.summary} | Profil: {profile.display_name}"
+        connection = f"{self.port_label} | {self._link_summary()} | Profil: {profile.display_name}"
         self.transfer_page.set_connection_text(connection)
         self.receive_page.set_connection_text(connection)
         self.diagnostics_page.set_profile(profile, self.port_label)
@@ -329,7 +344,9 @@ class MainWindow(QMainWindow):
             busy=self.busy,
             warnings_acknowledged=self.transfer_page.ack_warnings.isChecked(),
         )
-        self.transfer_page.apply_gate(gate, busy=self.busy, simulation=self.simulation)
+        self.transfer_page.apply_gate(
+            gate, busy=self.busy, simulation=self.simulation, lsv2=self.profile.protocol.is_lsv2
+        )
         self.receive_page.apply_gate(
             evaluate_receive_gate(simulation=self.simulation, port=self.config.port, busy=self.busy),
             busy=self.busy,
@@ -541,7 +558,14 @@ class MainWindow(QMainWindow):
         self._refresh_gates()
 
     # ----------------------------------------------------------- send
-    def start_send(self) -> None:
+    def start_drip_feed(self) -> None:
+        """NC drip-feed (Nachladebetrieb) via LSV2: the CNC requests data block by block."""
+        if not self.profile.protocol.is_lsv2:
+            self.statusBar().showMessage("Nachladebetrieb erfordert ein Profil mit LSV2-Protokoll", 8000)
+            return
+        self.start_send(drip_feed=True)
+
+    def start_send(self, drip_feed: bool = False) -> None:
         gate = evaluate_send_gate(
             self.program,
             simulation=self.simulation,
@@ -569,6 +593,8 @@ class MainWindow(QMainWindow):
             applied=payload.applied,
             show_safety_notice=self.config.show_safety_notice,
             appended_program_end=payload.appended_program_end,
+            protocol=profile.protocol.mode.label,
+            drip_feed=drip_feed,
         )
         outcome = self.confirm(info, self)
         if not outcome.accepted:
@@ -581,29 +607,39 @@ class MainWindow(QMainWindow):
             self._save_config()
             log.info("Safety notice disabled by user")
         log.info(
-            "Transfer confirmed: file=%s mode=%s port=%s profile=%s",
+            "Transfer confirmed: file=%s mode=%s drip_feed=%s port=%s profile=%s",
             program.path.name,
             "simulation" if self.simulation else "REAL",
+            drip_feed,
             self.port_label,
             profile.id,
         )
         self._close_retained()
-        transport = self._make_transport("send")
+        transport = self._make_transport("dripfeed" if drip_feed else "send")
         self._active_transport = transport
         clock = self._clock()
         self.transfer_page.error_panel.clear()
         self.transfer_page.reset_progress()
 
+        program_name = program.path.stem
+
         def job(cb: TaskCallbacks, token: CancellationToken) -> object:
-            sender = ProgramSender(
-                transport,
-                profile,
-                clock=clock,
-                token=token,
-                callbacks=SendCallbacks(
-                    on_state=cb.state, on_progress=cb.progress, on_traffic=cb.traffic, on_modem=cb.modem
-                ),
+            callbacks = SendCallbacks(
+                on_state=cb.state, on_progress=cb.progress, on_traffic=cb.traffic, on_modem=cb.modem
             )
+            if profile.protocol.is_lsv2:
+                lsv2_sender = Lsv2ProgramSender(
+                    transport,
+                    profile,
+                    drip_feed=drip_feed,
+                    program_name=program_name,
+                    clock=clock,
+                    token=token,
+                    callbacks=callbacks,
+                )
+                with keep_system_awake(drip_feed):
+                    return (lsv2_sender.send(payload), transport)
+            sender = ProgramSender(transport, profile, clock=clock, token=token, callbacks=callbacks)
             return (sender.send(payload), transport)
 
         self._start_task(
@@ -620,6 +656,8 @@ class MainWindow(QMainWindow):
         self._record_state(f"Senden: {state.label}")
         if state is SendState.WAITING_FOR_HANDSHAKE:
             self.header.set_status(StatusKind.WARNING, state.label)
+        elif state is SendState.DRIP_FEEDING:
+            self.header.set_status(StatusKind.ACTIVE, "Nachladebetrieb aktiv - CNC fordert Daten an")
         elif state.is_active:
             self.header.set_status(StatusKind.ACTIVE, state.label)
 
@@ -658,16 +696,15 @@ class MainWindow(QMainWindow):
         self.nav.setCurrentRow(1)
 
         def job(cb: TaskCallbacks, token: CancellationToken) -> object:
-            receiver = ProgramReceiver(
-                transport,
-                profile,
-                clock=clock,
-                token=token,
-                callbacks=ReceiveCallbacks(
-                    on_state=cb.state, on_progress=cb.progress, on_traffic=cb.traffic, on_modem=cb.modem
-                ),
+            callbacks = ReceiveCallbacks(
+                on_state=cb.state, on_progress=cb.progress, on_traffic=cb.traffic, on_modem=cb.modem
             )
-            result = receiver.receive()
+            if profile.protocol.is_lsv2:
+                result = Lsv2ProgramReceiver(
+                    transport, profile, clock=clock, token=token, callbacks=callbacks
+                ).receive()
+            else:
+                result = ProgramReceiver(transport, profile, clock=clock, token=token, callbacks=callbacks).receive()
             program: ReceivedProgram | None = None
             stored: StoredReceive | None = None
             store_error: UserFacingError | None = None

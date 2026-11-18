@@ -20,13 +20,15 @@ from deckellink.nc.analyzer import analyze
 from deckellink.nc.transformer import transform
 from deckellink.profiles.loader import builtin_profiles_dir
 from deckellink.profiles.repository import ProfileRepository
-from deckellink.simulation.scenarios import SAMPLE_PROGRAM, Scenario, get_scenario
+from deckellink.simulation.lsv2_cnc import Lsv2SimulatedCnc
+from deckellink.simulation.scenarios import SAMPLE_PROGRAM, Scenario, get_scenario, lsv2_config_for
 from deckellink.storage.archive import ReceiveArchive
 from deckellink.storage.backup import BackupManager
 from deckellink.storage.checksums import sha256_bytes, sha256_file
 from deckellink.storage.files import unique_path, write_new_file
 from deckellink.storage.paths import AppPaths
 from deckellink.transfer.cancellation import CancellationToken
+from deckellink.transfer.lsv2_transfer import Lsv2ProgramReceiver, Lsv2ProgramSender
 from deckellink.transfer.receiver import ProgramReceiver, ReceiveCallbacks, process_received
 from deckellink.transfer.sender import ProgramSender, SendCallbacks
 from deckellink.transport.simulated_transport import SimulatedTransport
@@ -79,6 +81,43 @@ def run_receive_scenario(
         transport, profile, clock=clock, token=token, callbacks=ReceiveCallbacks(on_traffic=on_traffic)
     )
     return receiver.receive()
+
+
+def run_lsv2_send_scenario(
+    scenario: Scenario,
+    profile: Profile,
+    *,
+    drip_feed: bool = False,
+    clock: Clock | None = None,
+    data: bytes | None = None,
+    cancel_after_bytes: int | None = None,
+) -> tuple[SendResult, Lsv2SimulatedCnc]:
+    clock = clock or FakeClock()
+    cnc = Lsv2SimulatedCnc(profile.serial, profile.protocol, lsv2_config_for(scenario, drip_feed=drip_feed), clock)
+    token = CancellationToken()
+    payload = transform(data if data is not None else scenario.sample_program, profile.transfer)
+
+    def on_progress(progress: TransferProgress) -> None:
+        if cancel_after_bytes is not None and progress.bytes_done >= cancel_after_bytes:
+            token.cancel()
+
+    sender = Lsv2ProgramSender(
+        cnc,
+        profile,
+        drip_feed=drip_feed,
+        clock=clock,
+        token=token,
+        callbacks=SendCallbacks(on_progress=on_progress),
+    )
+    return sender.send(payload), cnc
+
+
+def run_lsv2_receive_scenario(
+    scenario: Scenario, profile: Profile, *, clock: Clock | None = None
+) -> tuple[ReceiveResult, Lsv2SimulatedCnc]:
+    clock = clock or FakeClock()
+    cnc = Lsv2SimulatedCnc(profile.serial, profile.protocol, lsv2_config_for(scenario, receive=True), clock)
+    return Lsv2ProgramReceiver(cnc, profile, clock=clock).receive(), cnc
 
 
 @dataclass
@@ -140,6 +179,24 @@ def run_smoke_test(paths: AppPaths, report_path: Path | None = None) -> SmokeRep
             sha256=digest,
         )
         report.step("original_unchanged", sample.read_bytes() == original)
+        lsv2_profile = repo.get("dialog11_lsv2_7e1")
+        if lsv2_profile is None:
+            report.step("lsv2_dripfeed", False, error="LSV2-Profil fehlt")
+        else:
+            drip, cnc = run_lsv2_send_scenario(
+                get_scenario("lsv2_dripfeed"), lsv2_profile, drip_feed=True, data=original
+            )
+            report.step(
+                "lsv2_dripfeed",
+                drip.state is SendState.COMPLETED and cnc.received_program == payload.data and cnc.eot_received,
+                telegrams=cnc.telegrams_received,
+            )
+            lsv2_rx, _ = run_lsv2_receive_scenario(get_scenario("lsv2_ok"), lsv2_profile)
+            report.step(
+                "lsv2_receive",
+                lsv2_rx.state is ReceiveState.COMPLETED and lsv2_rx.raw == SAMPLE_PROGRAM,
+                bytes=len(lsv2_rx.raw),
+            )
         BackupManager(paths.backups).backup(sample)
         report.step("backup", any(paths.backups.rglob("SMOKE_TEST*")))
     except Exception as exc:  # report every failure instead of crashing

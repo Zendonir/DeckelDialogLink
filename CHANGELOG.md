@@ -2,6 +2,21 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.2.0] – 2026-11-18
+
+**Nur gegen den Simulator getestet.**
+
+### Hinzugefügt
+- LSV2-Protokoll (DIN-66019-Basisverfahren): Verbindungsaufbau mit ENQ/DLE 0, Telegramme `DLE STX … DLE ETX` + BCC mit DLE-Transparenz, alternierende Quittungen, NAK-Wiederholung, ENQ-Nachfrage bei verlorener Quittung, WACK, EOT/RVI.
+- NC-Nachladebetrieb (Drip-Feed) über LSV2, durch die Quittungen der CNC getaktet; eigener Zustand, Warnhinweis mit Pflichtbestätigung, Windows-Standby-Sperre.
+- Senden und Empfangen über LSV2.
+- Profilabschnitt `protocol` (optional, rückwärtskompatibel) und Profil `dialog11_lsv2_7e1` (nicht verifiziert); Reiter „Protokoll (LSV2)" im Profil-Editor.
+- Simulierte LSV2-CNC mit Satzpuffer und 8 LSV2-Szenarien.
+- Steuerzeichen im Terminal lesbar (`<ENQ>`, `<DLE>`, `<STX>` …).
+
+### Geändert
+- Drip-Feed ist nicht mehr Nichtziel; siehe `docs/DIALOG11.md` und `docs/SAFETY.md`.
+
 ## [0.1.0] – 2026-11-18
 
 Erste Version. **Nur gegen den Simulator getestet – keine Verbindung zu einer realen DIALOG 11 geprüft.**

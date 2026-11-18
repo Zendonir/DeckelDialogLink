@@ -216,6 +216,59 @@ class ReceiveSettings:
     program_name_pattern: str = ""
 
 
+class ProtocolMode(StrEnum):
+    """Transfer protocol on top of the serial line."""
+
+    PLAIN = "plain"
+    LSV2 = "lsv2"
+
+    @property
+    def label(self) -> str:
+        return {
+            "plain": "Ohne Protokoll (Klartext)",
+            "lsv2": "LSV2 (DIN 66019, Telegramme mit Quittung)",
+        }[self.value]
+
+
+class BccMode(StrEnum):
+    """How the block check character of an LSV2 telegram is formed (unverified for DIALOG 11)."""
+
+    TEXT_ETX = "text_etx"  # XOR of the (unstuffed) text and ETX
+    TRANSMITTED = "transmitted"  # XOR of all transmitted bytes after STX up to and including ETX
+    NONE = "none"  # no BCC byte
+
+
+@dataclass(frozen=True)
+class ProtocolSettings:
+    """LSV2 / DIN 66019 link settings.
+
+    The link procedure (ENQ, DLE 0 / DLE 1 acknowledgements, NAK, WACK, EOT) follows
+    the public DIN 66019 / ISO 1745 basic mode. Every detail of how the DIALOG 11
+    applies it is an assumption and therefore configurable - see
+    ``docs/VERIFICATION_CHECKLIST.md``.
+    """
+
+    mode: ProtocolMode = ProtocolMode.PLAIN
+    transparent: bool = True
+    bcc_mode: BccMode = BccMode.TEXT_ETX
+    enq_interval_ms: int = 2000
+    link_timeout_ms: int = 120_000
+    ack_timeout_ms: int = 5000
+    drip_feed_ack_timeout_ms: int = 600_000
+    max_retries: int = 3
+    wack_poll_ms: int = 1000
+    lines_per_telegram: int = 1
+    max_telegram_length: int = 256
+    include_line_ending: bool = True
+    start_telegrams: tuple[str, ...] = ()
+    end_telegrams: tuple[str, ...] = ()
+    send_eot_on_cancel: bool = True
+
+    @property
+    def is_lsv2(self) -> bool:
+        return self.mode is ProtocolMode.LSV2
+
+
 @dataclass(frozen=True)
 class Profile:
     """A complete communication profile for one machine/control configuration."""
@@ -227,6 +280,7 @@ class Profile:
     serial: SerialSettings = field(default_factory=SerialSettings)
     transfer: TransferSettings = field(default_factory=TransferSettings)
     receive: ReceiveSettings = field(default_factory=ReceiveSettings)
+    protocol: ProtocolSettings = field(default_factory=ProtocolSettings)
     description: str = ""
     schema_version: int = 1
     builtin: bool = field(default=False, compare=False)
@@ -247,6 +301,7 @@ class Profile:
             "serial": _dataclass_to_dict(self.serial),
             "transfer": _dataclass_to_dict(self.transfer),
             "receive": _dataclass_to_dict(self.receive),
+            "protocol": _dataclass_to_dict(self.protocol),
         }
 
 
@@ -258,6 +313,8 @@ def _dataclass_to_dict(obj: Any) -> dict[str, Any]:
             value = value.value
         elif isinstance(value, float) and value.is_integer():
             value = int(value)
+        elif isinstance(value, tuple):
+            value = list(value)
         result[name] = value
     return result
 

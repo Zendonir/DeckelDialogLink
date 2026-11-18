@@ -36,7 +36,7 @@ from deckellink.gui.widgets.status import SignalPanel, StatusIndicator
 
 
 def _state_kind(state: SendState) -> StatusKind:
-    if state in (SendState.SENDING, SendState.FINISHING, SendState.OPENING_PORT):
+    if state in (SendState.SENDING, SendState.DRIP_FEEDING, SendState.FINISHING, SendState.OPENING_PORT):
         return StatusKind.ACTIVE
     if state in (SendState.WAITING_FOR_HANDSHAKE, SendState.VALIDATING, SendState.CANCELLED):
         return StatusKind.WARNING
@@ -51,6 +51,7 @@ class TransferPage(QWidget):
     open_requested = Signal()
     check_requested = Signal()
     send_requested = Signal()
+    dripfeed_requested = Signal()
     cancel_requested = Signal()
     receive_requested = Signal()
     sample_requested = Signal()
@@ -75,6 +76,12 @@ class TransferPage(QWidget):
         self.send_button.setObjectName("PrimaryButton")
         self.send_button.setToolTip("Übertragung vorbereiten - vor dem Start folgt eine Bestätigung")
         self.send_button.clicked.connect(self.send_requested.emit)
+        self.dripfeed_button = QPushButton("&Nachladebetrieb (LSV2) …")
+        self.dripfeed_button.setToolTip(
+            "NC-Nachladebetrieb über LSV2: Die CNC fordert die Sätze während der Bearbeitung an. "
+            "Nur mit LSV2-Profil. Der Programmstart erfolgt ausschließlich an der CNC."
+        )
+        self.dripfeed_button.clicked.connect(self.dripfeed_requested.emit)
         self.receive_button = QPushButton("Von Maschine &empfangen")
         self.receive_button.setToolTip("Wechselt zum Empfang")
         self.receive_button.clicked.connect(self.receive_requested.emit)
@@ -88,6 +95,7 @@ class TransferPage(QWidget):
             self.check_button,
             self.sample_button,
             self.send_button,
+            self.dripfeed_button,
             self.receive_button,
             self.cancel_button,
         ):
@@ -195,7 +203,8 @@ class TransferPage(QWidget):
         self.setTabOrder(self.open_button, self.check_button)
         self.setTabOrder(self.check_button, self.sample_button)
         self.setTabOrder(self.sample_button, self.send_button)
-        self.setTabOrder(self.send_button, self.receive_button)
+        self.setTabOrder(self.send_button, self.dripfeed_button)
+        self.setTabOrder(self.dripfeed_button, self.receive_button)
         self.setTabOrder(self.receive_button, self.cancel_button)
 
     # ------------------------------------------------------------------
@@ -260,8 +269,10 @@ class TransferPage(QWidget):
     def set_connection_text(self, text: str) -> None:
         self.connection.setText(text)
 
-    def apply_gate(self, gate: SendGate, *, busy: bool, simulation: bool) -> None:
+    def apply_gate(self, gate: SendGate, *, busy: bool, simulation: bool, lsv2: bool = False) -> None:
         self.send_button.setEnabled(gate.allowed)
+        self.dripfeed_button.setEnabled(gate.allowed and lsv2)
+        self.dripfeed_button.setVisible(lsv2)
         self.send_button.setText("Simuliert &senden …" if simulation else "An Maschine &senden …")
         self.gate_label.setText("✔ Bereit zum Senden" if gate.allowed else f"Senden nicht möglich: {gate.reason_text}")
         for button in (self.open_button, self.check_button, self.sample_button, self.receive_button):

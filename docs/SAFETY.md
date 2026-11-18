@@ -8,6 +8,7 @@ DeckelLink ist ein Werkzeug für eine industrielle Maschinenumgebung. Es übertr
 - keine sicherheitsrelevanten Maschinenfunktionen ansteuern,
 - keine Ausführungsbefehle an die CNC senden (das Terminal ist reine Anzeige),
 - nicht automatisch senden – weder beim Start noch nach Dateiauswahl,
+- im Nachladebetrieb die Bearbeitung starten (sie liefert nur Sätze, die die CNC per Quittung anfordert),
 - Originaldateien verändern oder Dateien stillschweigend überschreiben,
 - behaupten, ein Programm sei fertigungssicher.
 
@@ -24,6 +25,20 @@ DeckelLink ist ein Werkzeug für eine industrielle Maschinenumgebung. Es übertr
 | Unvollständige Empfänge | Ablage in `failed/`, Kennzeichnung „UNVOLLSTÄNDIG" |
 | M30/M82 | nie automatisch; nur per Profil und ausdrücklicher Bestätigung |
 | Datenschutz in Logs | keine NC-Inhalte im Standardlog; Rohdatenlog nur nach Aktivierung |
+
+## Nachladebetrieb (LSV2)
+
+Im Nachladebetrieb arbeitet die Maschine, während Daten übertragen werden. Zusätzliche Maßnahmen:
+
+| Maßnahme | Umsetzung |
+|---|---|
+| Nur mit LSV2-Profil | Schaltfläche „Nachladebetrieb (LSV2)" erscheint nur bei aktivem LSV2-Profil |
+| Eigener Warnhinweis + Pflichtbestätigung | Starten erst nach Ankreuzen „Maschine muss bei Störungen an der CNC angehalten werden" (auch im Simulator) |
+| CNC bestimmt das Tempo | nächstes Telegramm erst nach Quittung der Steuerung |
+| Kein Standby | Windows-Energiesparmodus wird während des Nachladebetriebs unterdrückt |
+| Abbruch | sendet EOT (konfigurierbar); **hält die Maschine nicht an** |
+
+> Ein Abbruch in DeckelLink, ein Kabel- oder PC-Fehler unterbricht nur die Datenzufuhr. Die Maschine wird dadurch nicht sicher angehalten – das muss an der Steuerung geschehen.
 
 ## Sicherheitshinweis (Wortlaut)
 

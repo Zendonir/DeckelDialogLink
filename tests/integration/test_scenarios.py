@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from deckellink.clock import FakeClock
-from deckellink.domain.models import Profile
+from deckellink.domain.models import Profile, ProtocolMode
 from deckellink.domain.states import EndReason, ReceiveState, SendState
 from deckellink.nc.analyzer import analyze
 from deckellink.nc.transformer import transform
@@ -18,8 +18,9 @@ from deckellink.storage.archive import ReceiveArchive
 from deckellink.storage.paths import AppPaths
 from deckellink.transfer.receiver import process_received
 
-SEND_SCENARIOS = [s for s in SCENARIOS if s.expected_send_state]
-RECEIVE_SCENARIOS = [s for s in SCENARIOS if s.expected_receive_state]
+PLAIN = [s for s in SCENARIOS if s.protocol is ProtocolMode.PLAIN]
+SEND_SCENARIOS = [s for s in PLAIN if s.expected_send_state]
+RECEIVE_SCENARIOS = [s for s in PLAIN if s.expected_receive_state]
 
 
 def test_required_scenarios_exist() -> None:
@@ -130,7 +131,7 @@ def test_reproducible_results(profile_a: Profile) -> None:
 
 def test_simulation_runs_fast_with_fake_clock(profile_a: Profile) -> None:
     start = time.perf_counter()
-    for scenario in SCENARIOS:
+    for scenario in PLAIN:
         if scenario.expected_send_state:
             run_send_scenario(scenario, profile_a)
         if scenario.kind in (ScenarioKind.RECEIVE, ScenarioKind.BOTH):

@@ -287,7 +287,7 @@ def process_received(result: ReceiveResult, profile: Profile) -> ReceivedProgram
         )
     complete = (
         result.state is ReceiveState.COMPLETED
-        and result.end_reason in (EndReason.END_SEQUENCE, EndReason.INACTIVITY)
+        and result.end_reason in (EndReason.END_SEQUENCE, EndReason.INACTIVITY, EndReason.EOT)
         and (analysis.has_program_end or not profile.transfer.program_end.strip())
     )
     if not complete:

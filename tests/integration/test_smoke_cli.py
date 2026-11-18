@@ -38,6 +38,8 @@ def test_smoke_test_cli(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> N
         "simulated_receive",
         "stored",
         "original_unchanged",
+        "lsv2_dripfeed",
+        "lsv2_receive",
         "backup",
     }
     assert len(steps["stored"]["sha256"]) == 64

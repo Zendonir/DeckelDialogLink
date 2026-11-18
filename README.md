@@ -16,9 +16,19 @@ DeckelLink **überträgt ausschließlich Daten**. Die Software
 - bewegt keine Achsen und schaltet keine Maschinenmodi um,
 - sendet nichts automatisch (weder beim Programmstart noch nach Dateiauswahl),
 - verändert niemals Originaldateien und überschreibt keine Dateien stillschweigend,
+- liefert im Nachladebetrieb nur Daten, die die CNC anfordert – der Programmstart bleibt an der CNC,
 - prüft **nicht**, ob ein Programm geometrisch, technologisch oder maschinensicher ist.
 
 Programmauswahl, Freigabe und Ausführung bleiben vollständig an der CNC. Details: [docs/SAFETY.md](docs/SAFETY.md).
+
+## LSV2 und NC-Nachladebetrieb
+
+Mit einem LSV2-Profil (mitgeliefert: *DIALOG 11 – LSV2 4800 7E1 (Nachladebetrieb)*, nicht verifiziert) überträgt DeckelLink telegrammgesichert nach dem DIN-66019-Basisverfahren (ENQ, `DLE STX … DLE ETX` + BCC, Quittungen `DLE 0/1`, NAK-Wiederholung, EOT):
+
+- **Senden / Empfangen** wie gewohnt, nur gesichert über Telegramme.
+- **Nachladebetrieb (LSV2) …** auf der Seite *Übertragen*: Die CNC fordert die Sätze während der Bearbeitung durch ihre Quittungen an. Der Programmstart erfolgt ausschließlich an der CNC. Vor dem Start erscheint ein eigener Warnhinweis mit Pflichtbestätigung; während des Nachladebetriebs wird der Windows-Standby unterdrückt.
+
+Rahmung, BCC-Bildung, Telegramminhalt, Start-/Endtelegramme und Timeouts sind im Profil (Reiter *Protokoll (LSV2)*) einstellbar, weil die genaue LSV2-Umsetzung der DIALOG 11 nicht verifiziert ist ([docs/DIALOG11.md](docs/DIALOG11.md)). Simulator-Szenarien `LSV2: …` testen Nachladebetrieb, NAK, verlorene Quittungen, WACK, CNC-Abbruch und Verbindungsabbruch.
 
 ## Unterstützte Betriebssysteme
 
@@ -101,7 +111,7 @@ Dateinamen: `RECEIVED_JJJJMMTT_HHMMSS.nc`, bei Konflikten `_001`, `_002` … Vor
 
 *Einstellungen → Kommunikationsprofil*. Alle Parameter sind editierbar (Baudrate, Datenbits, Parität, Stoppbits, RTS/CTS, XON/XOFF, DSR/DTR, initiales RTS/DTR, CTS/DSR-Pflicht, Timeouts, Verzögerungen, Paketgröße, Zeilenende, Start-/Endsequenz, Empfangsende u. v. m.).
 
-- Mitgelieferte Profile: `DIALOG 11 – 4800 7N1 RTS/CTS` und `DIALOG 11 – 4800 7E1 ohne Handshake` (beide *nicht verifiziert*).
+- Mitgelieferte Profile: `DIALOG 11 – 4800 7N1 RTS/CTS`, `DIALOG 11 – 4800 7E1 ohne Handshake` und `DIALOG 11 – LSV2 4800 7E1 (Nachladebetrieb)` (alle *nicht verifiziert*).
 - Änderungen an Standardprofilen werden **als Kopie** gespeichert, das Original bleibt unverändert.
 - Ungültige Profildateien führen nicht zum Absturz; die fehlerhaften Felder werden angezeigt, es wird auf ein sicheres Standardprofil zurückgefallen.
 - Unsichere Kombinationen (z. B. unbegrenzter Empfang, sehr kurze Timeouts, aktiviertes M30-Ergänzen, unbekannte Startsequenz) werden als Warnung angezeigt.
@@ -123,7 +133,7 @@ mypy
 pytest --cov=deckellink
 ```
 
-Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 226 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
+Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 268 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
 
 ## Windows-Build
 

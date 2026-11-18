@@ -23,9 +23,20 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 | 17 | Verhalten bei Sonderzeichen (Tab, `;`, Kommentare in Klammern, Kleinbuchstaben) | Tabs → Leerzeichen; `;`-Zeilen und Kommentare werden beibehalten (Warnung) | `transfer.tab_handling`, `skip_semicolon_lines`, `comment_handling` | offen |
 | 18 | Verhalten beim Empfang (Startbedienung an CNC, Pausen, Ende) | Ende per M30 + Zeilenende oder 5 s Inaktivität; Wartezeit auf erste Daten 120 s | `receive.*` | offen |
 | 19 | Verhalten beim Senden (Einlesebereitschaft, notwendige Start-/Endverzögerung, Zeichenverzögerung) | 1000 ms Start-/Endverzögerung, keine Zeichen-/Paketverzögerung | `transfer.start_delay_ms`, `end_delay_ms`, `character_delay_ms`, `packet_*` | offen |
-| 20 | Möglichkeit oder Unmöglichkeit von Drip-Feed | nicht implementiert | – | offen |
+| 20 | Möglichkeit oder Unmöglichkeit von Drip-Feed (Nachladebetrieb) | über LSV2 implementiert, CNC-gesteuert über Quittungen | `protocol.*` | offen |
 | 21 | Zeilenende, das die CNC beim Senden ausgibt | CRLF erwartet, andere werden normalisiert | `receive.normalize_line_endings` | offen |
 | 22 | Kommentarzeichen der Steuerung | `(` … `)` | `transfer.comment_open/close` | offen |
+| 23 | Unterstützt die DIALOG 11 LSV2 / DIN 66019 überhaupt, und in welchen Betriebsarten? | ja (Annahme, Profil C) | `protocol.mode` | offen |
+| 24 | Schnittstellenparameter im LSV2-Betrieb | 4800 7E1, kein Handshake | `serial.*` (Profil C) | offen |
+| 25 | Wer baut die Verbindung auf (ENQ vom PC oder Anforderung der CNC)? | PC sendet ENQ, alle 2 s, max. 120 s | `protocol.enq_interval_ms`, `link_timeout_ms` | offen |
+| 26 | Rahmung: transparent (`DLE STX/DLE ETX`) oder einfach (`STX/ETX`) | transparent | `protocol.transparent` | offen |
+| 27 | Bildung des BCC | XOR über Text + ETX | `protocol.bcc_mode` | offen |
+| 28 | Quittungsfolge (DLE 0/DLE 1), Verhalten bei NAK, WACK, RVI | wie DIN 66019 Basisverfahren | – | offen |
+| 29 | Inhalt eines Telegramms (eine Zeile? mit CRLF? maximale Länge?) | 1 Zeile inkl. CRLF, max. 256 Zeichen | `protocol.lines_per_telegram`, `include_line_ending`, `max_telegram_length` | offen |
+| 30 | Programmkopf / Start- und Endtelegramme im LSV2-Betrieb | keine | `protocol.start_telegrams`, `end_telegrams` | offen |
+| 31 | Maximale Zeit zwischen zwei Satzanforderungen im Nachladebetrieb | 10 min | `protocol.drip_feed_ack_timeout_ms` | offen |
+| 32 | Verhalten der CNC bei Abbruch (EOT vom PC, EOT von der CNC) und bei Unterbrechung der Datenzufuhr | PC sendet EOT bei Abbruch | `protocol.send_eot_on_cancel` | offen |
+| 33 | Programmausgabe der CNC per LSV2 (Empfang) | ENQ von der CNC, Ende mit EOT | – | offen |
 
 ## Protokoll der Verifikation
 

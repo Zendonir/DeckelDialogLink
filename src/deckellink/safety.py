@@ -12,3 +12,12 @@ SCOPE_NOTICE = (
     "vollständig an der CNC-Steuerung. Es werden keine Zyklen gestartet, keine Achsen bewegt und "
     "keine Maschinenmodi umgeschaltet."
 )
+
+DRIP_FEED_NOTICE = (
+    "NACHLADEBETRIEB: Die CNC arbeitet das Programm ab, während DeckelLink die Sätze nach "
+    "Anforderung (Quittung) der Steuerung liefert. Den Programmstart nehmen Sie ausschließlich "
+    "an der CNC vor. Ein Abbruch in DeckelLink, ein Kabel- oder PC-Fehler unterbricht nur die "
+    "Datenzufuhr - die Maschine wird dadurch NICHT sicher angehalten. Halten Sie die Maschine bei "
+    "Störungen an der Steuerung an. Der PC darf während des Nachladebetriebs nicht in den "
+    "Energiesparmodus wechseln."
+)

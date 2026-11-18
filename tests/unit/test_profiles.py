@@ -167,7 +167,7 @@ def test_invalid_user_profile_does_not_crash_and_is_reported(paths: Any) -> None
     repo = ProfileRepository(builtin_profiles_dir(), paths.profiles)
     assert len(repo.problems) == 1
     assert "serial" in (repo.problems[0].error or "")
-    assert len(repo.profiles) == 2
+    assert len(repo.profiles) == 3
 
 
 def test_fallback_to_safe_default(tmp_path: Path) -> None:

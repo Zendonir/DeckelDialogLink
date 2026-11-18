@@ -17,12 +17,15 @@ from deckellink.domain.models import (
     DATA_BITS,
     STANDARD_BAUD_RATES,
     STOP_BITS,
+    BccMode,
     CommentHandling,
     EndDetection,
     LineEnding,
     MachineInfo,
     Parity,
     Profile,
+    ProtocolMode,
+    ProtocolSettings,
     ReceiveSettings,
     SerialSettings,
     TabHandling,
@@ -106,6 +109,24 @@ RECEIVE_RULES: dict[str, Rule] = {
     "program_name_pattern": Rule(str, max_length=200),
 }
 
+PROTOCOL_RULES: dict[str, Rule] = {
+    "mode": Rule(ProtocolMode),
+    "transparent": Rule(bool),
+    "bcc_mode": Rule(BccMode),
+    "enq_interval_ms": Rule(int, 100, 60_000),
+    "link_timeout_ms": Rule(int, 100, 3_600_000),
+    "ack_timeout_ms": Rule(int, 50, 600_000),
+    "drip_feed_ack_timeout_ms": Rule(int, 0, 86_400_000),
+    "max_retries": Rule(int, 0, 20),
+    "wack_poll_ms": Rule(int, 10, 60_000),
+    "lines_per_telegram": Rule(int, 1, 1000),
+    "max_telegram_length": Rule(int, 8, 4096),
+    "include_line_ending": Rule(bool),
+    "start_telegrams": Rule(tuple, maximum=10, max_length=128, printable=True),
+    "end_telegrams": Rule(tuple, maximum=10, max_length=128, printable=True),
+    "send_eot_on_cancel": Rule(bool),
+}
+
 KNOWN_TOP_LEVEL = {
     "schema_version",
     "id",
@@ -116,11 +137,26 @@ KNOWN_TOP_LEVEL = {
     "serial",
     "transfer",
     "receive",
+    "protocol",
 }
 
 
 def _check_value(path: str, value: Any, rule: Rule, errors: list[FieldError]) -> Any:
     kind = rule.kind
+    if kind is tuple:
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            errors.append(FieldError(path, "Liste von Texten erwartet"))
+            return None
+        if rule.maximum is not None and len(value) > rule.maximum:
+            errors.append(FieldError(path, f"höchstens {rule.maximum:g} Einträge erlaubt"))
+            return None
+        for item in value:
+            if (rule.max_length is not None and len(item) > rule.max_length) or not _PRINTABLE_RE.match(item):
+                errors.append(
+                    FieldError(path, f"Eintrag {item!r}: nur druckbare ASCII-Zeichen, max. {rule.max_length}")
+                )
+                return None
+        return tuple(value)
     if issubclass(kind, StrEnum):
         allowed = [m.value for m in kind]
         if not isinstance(value, str) or value.lower() not in allowed:
@@ -254,6 +290,10 @@ def parse_profile(data: Any, source: str = "", *, builtin: bool = False) -> tupl
         "receive", data.get("receive"), RECEIVE_RULES, ReceiveSettings, errors, warnings, required=False
     )
 
+    protocol = _parse_section(
+        "protocol", data.get("protocol"), PROTOCOL_RULES, ProtocolSettings, errors, warnings, required=False
+    )
+
     if isinstance(receive, ReceiveSettings):
         _check_receive_semantics(receive, errors)
 
@@ -268,6 +308,7 @@ def parse_profile(data: Any, source: str = "", *, builtin: bool = False) -> tupl
         serial=serial,
         transfer=transfer,
         receive=receive,
+        protocol=protocol,
         description=description,
         schema_version=SCHEMA_VERSION,
         builtin=builtin,
@@ -333,4 +374,18 @@ def safety_warnings(profile: Profile) -> list[str]:
         out.append("Tabulatoren werden unverändert gesendet - Verhalten der Steuerung unbekannt.")
     if not t.program_end.strip():
         out.append("Kein Programmende definiert - fehlendes Programmende wird nicht erkannt.")
+    p = profile.protocol
+    if p.is_lsv2:
+        out.append(
+            "LSV2-Protokoll aktiv: Telegrammaufbau (DLE-Transparenz, BCC, Quittungen) ist für die "
+            "DIALOG 11 nicht verifiziert."
+        )
+        if p.drip_feed_ack_timeout_ms == 0:
+            out.append("Nachladebetrieb ohne Zeitlimit für Quittungen der CNC (wartet unbegrenzt).")
+        if p.start_telegrams or p.end_telegrams:
+            out.append("Start-/Endtelegramme sind gesetzt - ihr Inhalt ist für die DIALOG 11 nicht verifiziert.")
+        if p.max_retries == 0:
+            out.append("LSV2 ohne Wiederholungen: jeder Übertragungsfehler bricht ab.")
+        if not p.include_line_ending:
+            out.append("Telegramme ohne Zeilenende - Zeilentrennung erfolgt nur über die Telegrammgrenzen.")
     return out

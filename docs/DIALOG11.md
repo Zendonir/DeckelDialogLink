@@ -37,9 +37,26 @@ DeckelLink ergänzt `M30` niemals automatisch. Ein Ergänzen ist nur möglich, w
 
 In einigen Quellen wird `M82` im Zusammenhang mit der Datenübertragung der DIALOG 11 erwähnt. Dessen Bedeutung und Notwendigkeit ist **unbestätigt**. Die Startsequenz im Profil ist daher standardmäßig **leer**; `M82` wird nur gesendet, wenn es ausdrücklich als Startsequenz eingetragen wird – dann erscheint eine Warnung.
 
-## Kein Drip-Feed
+## LSV2-Protokoll und NC-Nachladebetrieb
 
-DeckelLink überträgt komplette Programme in den Speicher der Steuerung bzw. empfängt sie. Ein fest eingebautes Drip-Feed (Abarbeiten während der Übertragung) gibt es nicht, da nicht verifiziert ist, ob und wie die DIALOG 11 dies unterstützt, und weil es die Grenze zur Programmausführung berühren würde.
+Für den NC-Nachladebetrieb (Abarbeiten, während die Sätze übertragen werden) wird das LSV2-Protokoll gefordert. DeckelLink implementiert dafür das **öffentliche DIN-66019- / ISO-1745-Basisverfahren**, auf dem LSV2 über V.24 aufsetzt:
+
+| Element | Umsetzung in DeckelLink | Status |
+|---|---|---|
+| Verbindungsaufbau | PC sendet `ENQ` (wiederholt alle 2 s), CNC antwortet `DLE 0` | Annahme |
+| Telegramm | `DLE STX` Text `DLE ETX` BCC, DLE im Text verdoppelt (alternativ `STX … ETX`) | Annahme, umschaltbar |
+| Prüfzeichen | XOR über Text + ETX (alternativ über alle Zeichen nach STX, oder kein BCC) | Annahme, umschaltbar |
+| Quittungen | abwechselnd `DLE 1` / `DLE 0`, `NAK` = Wiederholung, `DLE ;` (WACK) = warten | Annahme |
+| Fehlende Quittung | PC fragt mit `ENQ` nach, CNC wiederholt letzte Quittung (keine Doppeltelegramme) | Annahme |
+| Ende | `EOT` (beide Richtungen), `DLE <` (RVI) = Unterbrechung | Annahme |
+| Telegramminhalt | standardmäßig eine NC-Zeile inkl. CRLF je Telegramm | Annahme, konfigurierbar |
+| Start-/Endtelegramme | standardmäßig keine | konfigurierbar |
+
+**Nicht** nachgebildet sind die anwendungsspezifischen LSV2-Kommandos (Dateioperationen, Login usw.), da deren Verwendung durch die DIALOG 11 nicht dokumentiert vorliegt. Falls die Steuerung einen Programmkopf-Telegramm erwartet, kann er als Starttelegramm (z. B. `%{name}`) eingetragen werden.
+
+**Nachladebetrieb:** Die CNC bestimmt das Tempo – DeckelLink sendet das nächste Telegramm erst nach der Quittung der Steuerung. Das Quittungs-Timeout im Nachladebetrieb ist daher lang (Standard 10 min, 0 = unbegrenzt). DeckelLink startet die Bearbeitung nicht; der Programmstart erfolgt ausschließlich an der CNC. Siehe [SAFETY.md](SAFETY.md).
+
+Mitgeliefertes Profil: `dialog11_lsv2_7e1` – *DIALOG 11 – LSV2 4800 7E1 (Nachladebetrieb)*, **nicht verifiziert**.
 
 ## Programmnamen
 

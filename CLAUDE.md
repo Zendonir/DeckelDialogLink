@@ -24,7 +24,8 @@ Diese Regeln gelten dauerhaft für alle Änderungen in diesem Repository.
 
 ## DIALOG 11
 - **Keine erfundenen DIALOG-11-Protokolleigenschaften.** Unbekanntes bleibt konfigurierbar, mit konservativem Standard, gekennzeichnet im Code und in `docs/VERIFICATION_CHECKLIST.md`.
-- M30 nur als konfigurierbares Programmende; M82 nie ohne Profileinstellung; kein Drip-Feed.
+- M30 nur als konfigurierbares Programmende; M82 nie ohne Profileinstellung.
+- Nachladebetrieb nur über LSV2 und nur CNC-gesteuert (nächstes Telegramm erst nach Quittung); DeckelLink startet nie die Bearbeitung. LSV2-Details (Rahmung, BCC, Telegramminhalt) bleiben konfigurierbar und unverifiziert, bis an der FP2A geprüft.
 - Mitgelieferte Profile (`src/deckellink/resources/profiles/`) bleiben `unverified`, bis eine Prüfung an der realen FP2A dokumentiert ist.
 
 ## Qualität – vor jedem Abschluss ausführen

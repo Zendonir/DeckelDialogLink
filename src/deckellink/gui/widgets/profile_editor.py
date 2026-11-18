@@ -21,11 +21,13 @@ from PySide6.QtWidgets import (
 from deckellink.domain.models import (
     DATA_BITS,
     STANDARD_BAUD_RATES,
+    BccMode,
     CommentHandling,
     EndDetection,
     LineEnding,
     Parity,
     Profile,
+    ProtocolMode,
     TabHandling,
     VerificationStatus,
     WhitespaceHandling,
@@ -333,7 +335,82 @@ FIELDS: tuple[FieldSpec, ...] = (
     ),
 )
 
-SECTION_TITLES = {"serial": "Schnittstelle", "transfer": "Senden", "receive": "Empfangen"}
+LIST_SEPARATOR = " | "
+FIELDS = (
+    *FIELDS,
+    FieldSpec(
+        "protocol",
+        "mode",
+        "Protokoll",
+        "choice",
+        "Klartext oder LSV2 (DIN 66019).",
+        choices=tuple((m.value, m.label) for m in ProtocolMode),
+    ),
+    FieldSpec(
+        "protocol",
+        "transparent",
+        "Transparentmodus (DLE STX ... DLE ETX)",
+        "bool",
+        "DLE-Rahmung mit DLE-Verdopplung im Text. Nicht verifiziert.",
+    ),
+    FieldSpec(
+        "protocol",
+        "bcc_mode",
+        "Prüfzeichen (BCC)",
+        "choice",
+        "Bildung der XOR-Prüfsumme. Nicht verifiziert.",
+        choices=(
+            (BccMode.TEXT_ETX.value, "XOR über Text + ETX"),
+            (BccMode.TRANSMITTED.value, "XOR über alle gesendeten Zeichen nach STX"),
+            (BccMode.NONE.value, "kein BCC"),
+        ),
+    ),
+    FieldSpec("protocol", "enq_interval_ms", "ENQ-Wiederholintervall", "int", "", 100, 60_000, suffix=" ms"),
+    FieldSpec(
+        "protocol",
+        "link_timeout_ms",
+        "Max. Wartezeit Verbindungsaufbau",
+        "int",
+        "So lange wird ENQ wiederholt, bis die CNC mit DLE 0 antwortet.",
+        100,
+        3_600_000,
+        suffix=" ms",
+    ),
+    FieldSpec(
+        "protocol", "ack_timeout_ms", "Quittungs-Timeout (Speicherübertragung)", "int", "", 50, 600_000, suffix=" ms"
+    ),
+    FieldSpec(
+        "protocol",
+        "drip_feed_ack_timeout_ms",
+        "Quittungs-Timeout Nachladebetrieb",
+        "int",
+        "Maximale Bearbeitungszeit eines Satzes bis zur nächsten Anforderung. 0 = unbegrenzt.",
+        0,
+        86_400_000,
+        suffix=" ms",
+    ),
+    FieldSpec("protocol", "max_retries", "Max. Wiederholungen", "int", "Bei NAK oder fehlender Quittung.", 0, 20),
+    FieldSpec("protocol", "wack_poll_ms", "Wartezeit nach WACK", "int", "", 10, 60_000, suffix=" ms"),
+    FieldSpec("protocol", "lines_per_telegram", "Zeilen pro Telegramm", "int", "", 1, 1000),
+    FieldSpec("protocol", "max_telegram_length", "Max. Telegrammlänge", "int", "", 8, 4096, suffix=" Zeichen"),
+    FieldSpec("protocol", "include_line_ending", "Zeilenende im Telegramm mitsenden", "bool", ""),
+    FieldSpec(
+        "protocol",
+        "start_telegrams",
+        "Starttelegramme",
+        "list",
+        "Optional, durch ' | ' getrennt. {name} = Programmname. Nicht verifiziert.",
+    ),
+    FieldSpec("protocol", "end_telegrams", "Endtelegramme", "list", "Optional, durch ' | ' getrennt."),
+    FieldSpec("protocol", "send_eot_on_cancel", "Bei Abbruch EOT senden", "bool", ""),
+)
+
+SECTION_TITLES = {
+    "serial": "Schnittstelle",
+    "transfer": "Senden",
+    "receive": "Empfangen",
+    "protocol": "Protokoll (LSV2)",
+}
 
 
 class ProfileEditor(QWidget):
@@ -425,7 +502,7 @@ class ProfileEditor(QWidget):
                 )
                 widget.setCurrentIndex(max(index, 0))
             elif isinstance(widget, QLineEdit):
-                widget.setText(str(value))
+                widget.setText(LIST_SEPARATOR.join(value) if isinstance(value, list) else str(value))
         self.blockSignals(False)
 
     def to_dict(self) -> dict[str, Any]:
@@ -446,5 +523,8 @@ class ProfileEditor(QWidget):
             elif isinstance(widget, QComboBox):
                 data[section][key] = widget.currentData()
             elif isinstance(widget, QLineEdit):
-                data[section][key] = widget.text()
+                if isinstance(data[section][key], list):
+                    data[section][key] = [part.strip() for part in widget.text().split("|") if part.strip()]
+                else:
+                    data[section][key] = widget.text()
         return data

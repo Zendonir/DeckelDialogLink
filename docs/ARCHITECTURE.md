@@ -66,6 +66,20 @@
 
 `ProgramReceiver.receive()` → Rohbytes unverändert + Zeitstempel → `process_received()` (Nullbytes entfernen, Zeilenenden normalisieren, Analyse, Vollständigkeit) → `ReceiveArchive.store()` (exklusives Schreiben, `received/` oder `failed/`, Rohdaten in `raw/`, JSON-Metadaten).
 
+## LSV2 und Nachladebetrieb
+
+```
+transfer/lsv2.py           Sicherungsschicht DIN 66019: encode_telegram, FrameDecoder (inkrementell),
+                           Lsv2Link (establish / send_telegram / finish bzw. accept / receive_event)
+transfer/lsv2_transfer.py  Lsv2ProgramSender (Speicherübertragung + Nachladebetrieb),
+                           Lsv2ProgramReceiver; gleiche Result-/Callback-Typen wie Klartext
+simulation/lsv2_cnc.py     reaktive simulierte LSV2-CNC (Empfänger mit Satzpuffer/Abarbeitung, Sender,
+                           Fehlerinjektion: NAK, verlorene Quittung, WACK, EOT, Abbruch, nie bereit)
+power.py                   verhindert Windows-Standby während des Nachladebetriebs
+```
+
+Das Profil enthält den optionalen Abschnitt `protocol` (`mode: plain|lsv2`). Fehlt er, gilt Klartext – bestehende Profile bleiben gültig. Die GUI wählt Sender/Empfänger anhand von `profile.protocol.mode`. Der Nachladebetrieb unterscheidet sich vom Senden nur durch das lange Quittungs-Timeout, den Zustand `DRIP_FEEDING`, die eigene Bestätigung und die Standby-Sperre; das Tempo bestimmt die CNC über ihre Quittungen.
+
 ## Abweichungen von der Vorgabestruktur
 
 | Vorgabe | Umsetzung | Grund |

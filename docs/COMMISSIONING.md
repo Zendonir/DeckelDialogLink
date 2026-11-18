@@ -46,4 +46,12 @@ Ziel: Die Kommunikation schrittweise und ohne Risiko für Maschine und Programme
 ## 11. Keine automatische Ausführung
 - DeckelLink startet nie ein Programm. Die Ausführung erfolgt ausschließlich durch den Bediener an der CNC, beim ersten Lauf ohne Werkstück bzw. nach betrieblichen Vorgaben (Einzelsatz, reduzierter Vorschub, Probelauf).
 
+## 12. Nachladebetrieb (LSV2) – erst nach den Schritten 1–11
+1. Klären (Unterlagen), ob und wie die DIALOG 11 LSV2/Nachladebetrieb unterstützt; Profil C anpassen.
+2. Zuerst **Speicherübertragung mit LSV2** (normales Senden) eines kleinen Programms testen; Terminal (HEX) auf `ENQ`, `DLE 0`, `DLE 1`, `NAK` prüfen.
+3. Empfang per LSV2 testen (CNC gibt Programm aus).
+4. Nachladebetrieb zunächst mit einem Programm **ohne Bearbeitung** (z. B. nur Verweilzeiten/Kommentare bzw. Probelauf ohne Werkstück) testen; Abbruch an der CNC und in DeckelLink ausprobieren und beobachten, wie die Steuerung reagiert.
+5. Quittungs-Timeout an die längste Satzbearbeitungszeit anpassen.
+6. Energiesparmodus des PCs und der USB-Anschlüsse deaktivieren.
+
 Nach erfolgreichem Abschluss: Profil im Editor als „An realer Maschine verifiziert" markieren und die Checkliste mit Datum, Steuerungsstand und Ergebnis ergänzen.

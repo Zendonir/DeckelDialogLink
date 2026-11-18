@@ -12,6 +12,7 @@ class SendState(StrEnum):
     OPENING_PORT = "opening_port"
     WAITING_FOR_HANDSHAKE = "waiting_for_handshake"
     SENDING = "sending"
+    DRIP_FEEDING = "drip_feeding"
     FINISHING = "finishing"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -31,6 +32,7 @@ class SendState(StrEnum):
             SendState.OPENING_PORT,
             SendState.WAITING_FOR_HANDSHAKE,
             SendState.SENDING,
+            SendState.DRIP_FEEDING,
             SendState.FINISHING,
         )
 
@@ -42,6 +44,7 @@ _SEND_LABELS = {
     SendState.OPENING_PORT: "Port wird geöffnet",
     SendState.WAITING_FOR_HANDSHAKE: "Warte auf Freigabe (Handshake)",
     SendState.SENDING: "Sende Daten",
+    SendState.DRIP_FEEDING: "Nachladebetrieb - Daten werden nach Quittung der CNC geliefert",
     SendState.FINISHING: "Übertragung wird abgeschlossen",
     SendState.COMPLETED: "Übertragung abgeschlossen",
     SendState.CANCELLED: "Übertragung abgebrochen",
@@ -105,6 +108,7 @@ class EndReason(StrEnum):
     NO_DATA = "no_data"
     CANCELLED = "cancelled"
     ERROR = "error"
+    EOT = "eot"
 
     @property
     def label(self) -> str:
@@ -115,4 +119,5 @@ class EndReason(StrEnum):
             "no_data": "Keine Daten empfangen",
             "cancelled": "Durch Benutzer abgebrochen",
             "error": "Übertragungsfehler",
+            "eot": "Übertragungsende (EOT) der CNC",
         }[self.value]
