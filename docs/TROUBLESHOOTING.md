@@ -9,6 +9,13 @@ Zu jedem Fehler zeigt DeckelLink eine verständliche Meldung mit möglichen Ursa
 | „COMx wurde nicht gefunden." | Adapter getrennt oder neue COM-Nummer nach Umstecken → *Einstellungen → Ports suchen*. Treiber im Gerätemanager prüfen. |
 | „COMx konnte nicht geöffnet werden." | Treiber fehlt/defekt; Rechte; Port existiert nicht mehr. |
 
+## Netzwerkadapter nicht erreichbar
+- IP-Adresse/TCP-Port falsch, Adapter aus oder nicht im selben Netz (Ping testen).
+- Adapter nicht im Modus „TCP Server" bzw. „RFC 2217".
+- Eine andere Anwendung hält bereits die einzige erlaubte Verbindung.
+- Firewall des PCs blockiert ausgehende Verbindungen.
+- „Einstellungen passen nicht zur Verbindungsart": TCP-Rohdaten + Profil mit CTS-Prüfung → CTS-Prüfung abschalten (Handshake im Adapter) oder RFC 2217 wählen.
+
 ## Senden hängt bzw. „Sendefreigabe (CTS) nicht erteilt"
 - An der CNC wurde das Einlesen nicht gestartet.
 - Profil mit RTS/CTS, aber Kabel führt CTS nicht → Kabel prüfen oder (nach Verifikation!) Profil ohne Handshake.

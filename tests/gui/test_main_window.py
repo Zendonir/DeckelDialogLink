@@ -134,10 +134,10 @@ def test_error_is_user_friendly(qtbot: QtBot, make_window: WindowFactory, fixtur
 def test_real_mode_missing_port_error_and_safety_notice(
     qtbot: QtBot, make_window: WindowFactory, fixtures_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fake_serial(port: str, settings: Any) -> SimulatedTransport:
+    def fake_serial(kind: Any, port: str, host: str, tcp_port: int, settings: Any) -> SimulatedTransport:
         return SimulatedTransport(settings, SimulationConfig(open_error="not_found"))
 
-    monkeypatch.setattr(main_window_module, "SerialTransport", fake_serial)
+    monkeypatch.setattr(main_window_module, "create_hardware_transport", fake_serial)
     window = make_window(AppConfig(simulation_mode=False, port="COM42"))
     load_fixture(window, fixtures_dir, tmp_path)
     window.start_send()

@@ -8,7 +8,7 @@ Diese Regeln gelten dauerhaft für alle Änderungen in diesem Repository.
 - Benutzerdokumentation (`README.md`, `docs/`): **Deutsch**.
 
 ## Technik
-- Python **3.12+**, PySide6, pyserial, platformdirs. Keine Web-/Cloud-Komponenten.
+- Python **3.12+**, PySide6, pyserial, platformdirs. Keine Web-/Cloud-Komponenten. Netzwerk nur als ausgehende Verbindung zu einem RS-232/Ethernet-Adapter im lokalen Maschinennetz (TCP-Rohdaten oder RFC 2217); DeckelLink öffnet keine eingehenden Ports.
 - Vollständige Typannotationen für alle öffentlichen Funktionen; `mypy` läuft im Strict-Modus.
 - Die GUI spricht nie direkt mit pyserial – nur über `deckellink.transport.base.Transport`.
 - **Keine blockierenden Operationen im GUI-Thread.** Port-I/O läuft in `gui/workers.py` (QThread + Worker); Worker greifen nie auf Widgets zu, sondern senden Signale.

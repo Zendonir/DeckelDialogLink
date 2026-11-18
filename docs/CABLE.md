@@ -46,6 +46,23 @@ Gängige PC-seitige Belegung (DTE, DB9 nach EIA-574) – **nur PC-Seite, nicht M
 
 Im Internet kursieren viele „universelle" Nullmodem-Belegungen (vollständig gekreuzt, mit Loopback-Brücken RTS-CTS, DTR-DSR-DCD …). Eine solche Brücke **täuscht Handshake-Signale vor** und kann bewirken, dass der PC sendet, obwohl die Steuerung nicht empfangsbereit ist (Datenverlust). Verwenden Sie keine Belegung, die nicht zur Dokumentation Ihrer Maschine passt.
 
+## RS-232/Ethernet-Adapter (Device Server)
+
+Statt eines USB-Adapters kann ein RS-232/Ethernet-Adapter (z. B. Moxa NPort, Lantronix, USR-TCP232) verwendet werden. DeckelLink unterstützt drei Varianten (*Einstellungen → Verbindung → Verbindungsart*):
+
+| Verbindungsart | Adapter-Modus | Serielle Parameter | Modemleitungen in DeckelLink |
+|---|---|---|---|
+| COM-Port | Hersteller-Treiber mit virtuellem COM-Port („Real COM") | aus dem Profil | wie lokaler Port (abhängig vom Treiber) |
+| TCP-Rohdaten | „TCP Server" | **im Adapter** einstellen (Baudrate, Datenformat, Handshake müssen zum Profil passen) | nicht sichtbar |
+| RFC 2217 | „RFC 2217" / Telnet COM Port Control | aus dem Profil, von DeckelLink übertragen | CTS/DSR/DCD/RI werden gemeldet |
+
+Hinweise:
+- IP-Adresse und TCP-Port aus der Adapter-Konfiguration übernehmen (Moxa-Standard z. B. 4001 – im Adapter prüfen).
+- Bei **TCP-Rohdaten** kann DeckelLink CTS/DSR nicht sehen. Profile mit „CTS vor dem Senden erforderlich" werden deshalb abgewiesen; ein Hardware-Handshake muss im Adapter konfiguriert werden. Für Nachladebetrieb mit LSV2 ist das unkritisch, da dort die Quittungen das Tempo bestimmen.
+- Viele Adapter erlauben nur **eine** TCP-Verbindung gleichzeitig.
+- Der Adapter sollte in einem abgeschotteten Maschinennetz stehen (kein Zugang aus dem Internet). DeckelLink selbst öffnet keine Ports und nutzt keine Cloud-Dienste.
+- Die RS-232-Seite des Adapters ist wie ein PC-Anschluss zu behandeln (siehe oben); der Loopback-Test funktioniert auch über den Adapter.
+
 ## Empfehlungen
 
 - Geschirmtes Kabel, Schirm einseitig bzw. nach Vorgabe der Maschinendokumentation auflegen, möglichst kurze Leitung.

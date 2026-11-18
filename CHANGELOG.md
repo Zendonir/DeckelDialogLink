@@ -2,6 +2,16 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.4.0] – 2026-11-18
+
+### Hinzugefügt
+- Unterstützung für RS-232/Ethernet-Adapter: Verbindungsart TCP-Rohdaten (TCP-Server-Modus) und RFC 2217, wählbar in den Einstellungen; virtuelle COM-Ports von Hersteller-Treibern weiterhin als COM-Port.
+- Verständliche Fehlermeldungen für nicht erreichbare Adapter und unpassende Einstellungen (CTS-Prüfung bei TCP-Rohdaten).
+- Tests gegen einen lokalen TCP-Testserver (Senden/Empfangen, auch über die GUI).
+
+### Bewusst nicht umgesetzt
+- Fernsteuerung der Maschine (Programmstart, Achsbewegung, Betriebsartenwahl, Befehls-Terminal) – siehe `docs/SAFETY.md`.
+
 ## [0.3.0] – 2026-11-18
 
 **Nur gegen den Simulator getestet.**

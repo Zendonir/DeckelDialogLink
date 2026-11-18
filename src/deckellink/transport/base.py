@@ -50,6 +50,14 @@ class PortNotFoundError(PortOpenError):
     """The port does not exist (adapter unplugged, renamed COM number)."""
 
 
+class NetworkUnreachableError(PortOpenError):
+    """The RS-232/Ethernet adapter could not be reached over the network."""
+
+
+class TransportConfigurationError(TransportError):
+    """Profile settings cannot be fulfilled by the chosen connection type."""
+
+
 class TransportTimeoutError(TransportError):
     """No progress within the configured timeout."""
 

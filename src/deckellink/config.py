@@ -20,6 +20,9 @@ LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
 @dataclass
 class AppConfig:
     port: str = ""
+    connection_kind: str = "serial"  # serial | tcp | rfc2217 (RS-232/Ethernet adapter)
+    network_host: str = ""
+    network_port: int = 4001
     # Safe default: the application starts in simulation mode. Real transfers
     # require a conscious switch in the settings.
     simulation_mode: bool = True
@@ -62,6 +65,12 @@ class AppConfig:
                 warnings.append(f"Ungültiger Wert für {f.name}: {value!r}")
                 continue
             setattr(config, f.name, value)
+        if config.connection_kind not in ("serial", "tcp", "rfc2217"):
+            warnings.append(f"Unbekannte Verbindungsart {config.connection_kind!r}")
+            config.connection_kind = "serial"
+        if not 1 <= config.network_port <= 65535:
+            warnings.append(f"Ungültiger TCP-Port {config.network_port}")
+            config.network_port = 4001
         if config.log_level not in LOG_LEVELS:
             warnings.append(f"Unbekanntes Log-Level {config.log_level!r}")
             config.log_level = "INFO"

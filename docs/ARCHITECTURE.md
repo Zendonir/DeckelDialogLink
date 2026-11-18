@@ -80,6 +80,10 @@ power.py                   verhindert Windows-Standby während des Nachladebetri
 
 Das Profil enthält den optionalen Abschnitt `protocol` (`mode: plain|lsv2`). Fehlt er, gilt Klartext – bestehende Profile bleiben gültig. Die GUI wählt Sender/Empfänger anhand von `profile.protocol.mode`. Der Nachladebetrieb unterscheidet sich vom Senden nur durch das lange Quittungs-Timeout, den Zustand `DRIP_FEEDING`, die eigene Bestätigung und die Standby-Sperre; das Tempo bestimmt die CNC über ihre Quittungen.
 
+## Netzwerkadapter
+
+`transport/network_transport.py`: `NetworkSerialTransport` nutzt die URL-Handler von pyserial (`socket://` für TCP-Rohdaten, `rfc2217://`) und erbt die gesamte Fehlerbehandlung von `SerialTransport`. Bei TCP-Rohdaten werden Modemleitungen als „unbekannt" gemeldet (pyserial liefert dort Platzhalterwerte) und Profile mit CTS/DSR-Pflicht abgewiesen. `create_hardware_transport()` wählt anhand der Einstellung `connection_kind` den Transport; die GUI kennt nur noch den „Verbindungsziel"-Begriff (`connection_target`).
+
 ## Maschinenparameter
 
 ```

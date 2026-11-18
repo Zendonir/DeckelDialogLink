@@ -13,6 +13,11 @@ DeckelLink ist ein Werkzeug für eine industrielle Maschinenumgebung. Es übertr
 - Originaldateien verändern oder Dateien stillschweigend überschreiben,
 - behaupten, ein Programm sei fertigungssicher.
 
+### Warum keine Fernsteuerung?
+Programmstart, Achsbewegungen, Betriebsartenwahl oder ein frei beschreibbares Befehls-Terminal sind bewusst nicht enthalten:
+- Für die DIALOG 11 ist keine Fernsteuerschnittstelle über V.24 dokumentiert. Befehle müssten erfunden werden – unbekannte Zeichenfolgen an eine Werkzeugmaschine zu senden, ist nicht beherrschbar.
+- Bewegungen und Programmstarts setzen Anwesenheit und Sicht des Bedieners, Zustimmtaster und erreichbaren NOT-HALT an der Maschine voraus. Eine Fernsteuerung über eine serielle oder Netzwerkverbindung würde dieses Sicherheitskonzept umgehen und wäre eine wesentliche Veränderung der Maschine mit neuer Risikobeurteilung (Maschinenrichtlinie 2006/42/EG bzw. Maschinenverordnung (EU) 2023/1230).
+
 ## Schutzmaßnahmen in der Software
 | Maßnahme | Umsetzung |
 |---|---|

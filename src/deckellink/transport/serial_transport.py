@@ -15,6 +15,7 @@ from deckellink.domain.models import Parity, SerialSettings
 from deckellink.transport.base import (
     ConnectionLostError,
     ModemStatus,
+    NetworkUnreachableError,
     PortBusyError,
     PortNotFoundError,
     PortOpenError,
@@ -77,9 +78,27 @@ def available_ports() -> list[PortInfo]:
     )
 
 
+_NETWORK_MARKERS = (
+    "connection refused",
+    "timed out",
+    "unreachable",
+    "no route to host",
+    "name or service not known",
+    "getaddrinfo",
+    "nodename nor servname",
+    "temporary failure in name resolution",
+    "winerror 10061",
+    "winerror 10060",
+    "winerror 11001",
+    "connection reset",
+)
+
+
 def classify_open_error(exc: BaseException, port: str) -> PortOpenError:
     text = f"{type(exc).__name__} {exc} {exc!r}".lower()
     err_no = getattr(exc, "errno", None)
+    if "://" in port and any(m in text for m in _NETWORK_MARKERS):
+        return NetworkUnreachableError(f"{port} ist nicht erreichbar: {exc}", port)
     if err_no in (errno.EACCES, errno.EBUSY) or any(m in text for m in _BUSY_MARKERS):
         return PortBusyError(f"{port} ist belegt oder der Zugriff wurde verweigert: {exc}", port)
     if err_no == errno.ENOENT or any(m in text for m in _MISSING_MARKERS):

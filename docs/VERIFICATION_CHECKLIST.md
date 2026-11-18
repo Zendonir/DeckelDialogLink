@@ -44,6 +44,7 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 | 38 | Akzeptiert die Steuerung eine vollständige Parameterdatei oder nur Teilmengen? | vollständige Datei | – | offen |
 | 39 | Verhalten der Steuerung bei fehlerhafter oder abgebrochener Parametereingabe | unbekannt | – | offen |
 | 40 | Gleiche Schnittstellenparameter/Protokoll wie für NC-Programme? | ja (gleiches Profil) | `serial.*`, `protocol.*` | offen |
+| 41 | Betrieb über RS-232/Ethernet-Adapter: Modell, Modus (TCP-Server/RFC 2217), Adapter-Einstellungen, Handshake im Adapter | nur gegen lokalen TCP-Testserver geprüft | Einstellungen → Verbindungsart | offen |
 
 ## Protokoll der Verifikation
 

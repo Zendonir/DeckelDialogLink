@@ -92,7 +92,8 @@ from deckellink.transfer.receiver import ProgramReceiver, ReceiveCallbacks, proc
 from deckellink.transfer.sender import ProgramSender, SendCallbacks
 from deckellink.transport.base import ModemStatus, Transport
 from deckellink.transport.loopback import LoopbackTransport
-from deckellink.transport.serial_transport import SerialTransport, available_ports
+from deckellink.transport.network_transport import ConnectionKind, connection_target, create_hardware_transport
+from deckellink.transport.serial_transport import available_ports
 from deckellink.transport.simulated_transport import SIMULATED_PORT_NAME, SimulatedTransport
 from deckellink.version import APP_NAME, __version__
 
@@ -284,6 +285,7 @@ class MainWindow(QMainWindow):
         sp = self.settings_page
         sp.simulation_toggled.connect(self.set_simulation_mode)
         sp.port_selected.connect(self.set_port)
+        sp.network_changed.connect(self.set_network_connection)
         sp.refresh_ports_requested.connect(self._refresh_ports)
         sp.scenario_selected.connect(self.set_scenario)
         sp.profile_selected.connect(self.select_profile)
@@ -313,7 +315,20 @@ class MainWindow(QMainWindow):
     def port_label(self) -> str:
         if self.simulation:
             return SIMULATED_PORT_NAME
+        kind = self.connection_kind
+        if kind.is_network:
+            return self.connection_target or "(kein Netzwerkadapter konfiguriert)"
         return self.config.port or "(kein Port)"
+
+    @property
+    def connection_kind(self) -> ConnectionKind:
+        return ConnectionKind(self.config.connection_kind)
+
+    @property
+    def connection_target(self) -> str:
+        return connection_target(
+            self.connection_kind, self.config.port, self.config.network_host, self.config.network_port
+        )
 
     def scenario(self) -> Scenario:
         return get_scenario(self.config.simulation_scenario)
@@ -338,7 +353,9 @@ class MainWindow(QMainWindow):
             if purpose == "receive" and not config.machine_program:
                 config = replace(config, machine_program=SAMPLE_PROGRAM)
             return SimulatedTransport(serial, config, self._clock())
-        return SerialTransport(self.config.port, serial)
+        return create_hardware_transport(
+            self.connection_kind, self.config.port, self.config.network_host, self.config.network_port, serial
+        )
 
     def _link_summary(self) -> str:
         summary = self.profile.serial.summary
@@ -366,7 +383,7 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------- refreshing
     def _refresh_all(self) -> None:
         profile = self.profile
-        self.header.set_mode(self.simulation, self.config.port)
+        self.header.set_mode(self.simulation, self.port_label)
         self.header.set_connection(self.port_label, self._link_summary())
         self.header.set_profile(profile.display_name, profile.verification_status is VerificationStatus.VERIFIED)
         connection = f"{self.port_label} | {self._link_summary()} | Profil: {profile.display_name}"
@@ -381,7 +398,7 @@ class MainWindow(QMainWindow):
         gate = evaluate_send_gate(
             self.program,
             simulation=self.simulation,
-            port=self.config.port,
+            port=self.connection_target,
             busy=self.busy,
             warnings_acknowledged=self.transfer_page.ack_warnings.isChecked(),
         )
@@ -389,7 +406,7 @@ class MainWindow(QMainWindow):
             gate, busy=self.busy, simulation=self.simulation, lsv2=self.profile.protocol.is_lsv2
         )
         self.receive_page.apply_gate(
-            evaluate_receive_gate(simulation=self.simulation, port=self.config.port, busy=self.busy),
+            evaluate_receive_gate(simulation=self.simulation, port=self.connection_target, busy=self.busy),
             busy=self.busy,
         )
         monitoring = self.task is not None and self.task.name == TASK_MONITOR
@@ -411,10 +428,10 @@ class MainWindow(QMainWindow):
             self.header.set_status(StatusKind.ERROR, "Fehler beim letzten Vorgang")
         elif self.simulation:
             self.header.set_status(StatusKind.READY, "Bereit (Simulator)")
-        elif self.config.port:
-            self.header.set_status(StatusKind.READY, f"Bereit - {self.config.port}")
+        elif self.connection_target:
+            self.header.set_status(StatusKind.READY, f"Bereit - {self.port_label}")
         else:
-            self.header.set_status(StatusKind.IDLE, "Getrennt - kein COM-Port gewählt")
+            self.header.set_status(StatusKind.IDLE, "Getrennt - keine Schnittstelle konfiguriert")
 
     def _refresh_ports(self) -> None:
         self.settings_page.set_ports(available_ports(), self.config.port)
@@ -617,7 +634,7 @@ class MainWindow(QMainWindow):
         gate = evaluate_send_gate(
             self.program,
             simulation=self.simulation,
-            port=self.config.port,
+            port=self.connection_target,
             busy=self.busy,
             warnings_acknowledged=self.transfer_page.ack_warnings.isChecked(),
         )
@@ -730,7 +747,7 @@ class MainWindow(QMainWindow):
 
     # ----------------------------------------------------------- receive
     def start_receive(self) -> None:
-        gate = evaluate_receive_gate(simulation=self.simulation, port=self.config.port, busy=self.busy)
+        gate = evaluate_receive_gate(simulation=self.simulation, port=self.connection_target, busy=self.busy)
         if not gate.allowed:
             self.statusBar().showMessage(f"Empfang nicht möglich: {gate.reason_text}", 8000)
             return
@@ -824,7 +841,7 @@ class MainWindow(QMainWindow):
             now=datetime.now().astimezone(),
             port_label=self.port_label,
             simulation=self.simulation,
-            port=self.config.port,
+            port=self.connection_target,
             busy=self.busy,
         )
 
@@ -845,7 +862,7 @@ class MainWindow(QMainWindow):
         self._refresh_parameter_gate()
 
     def start_parameter_read(self) -> None:
-        gate = evaluate_receive_gate(simulation=self.simulation, port=self.config.port, busy=self.busy)
+        gate = evaluate_receive_gate(simulation=self.simulation, port=self.connection_target, busy=self.busy)
         if not gate.allowed:
             self.statusBar().showMessage(f"Parameter auslesen nicht möglich: {gate.reason_text}", 8000)
             return
@@ -1096,7 +1113,7 @@ class MainWindow(QMainWindow):
         if self.busy:
             self.diagnostics_page.set_port_open(False)
             return
-        if not self.simulation and not self.config.port:
+        if not self.simulation and not self.connection_target:
             self.diagnostics_page.set_port_open(False, "Kein COM-Port gewählt")
             return
         self._close_retained()
@@ -1169,7 +1186,7 @@ class MainWindow(QMainWindow):
                 self.loopback_dialog.set_running(False)
             self.statusBar().showMessage("Loopback nicht möglich: ein anderer Vorgang läuft", 6000)
             return
-        if not self.simulation and not self.config.port:
+        if not self.simulation and not self.connection_target:
             if self.loopback_dialog is not None:
                 self.loopback_dialog.set_running(False)
             self.statusBar().showMessage("Loopback nicht möglich: kein COM-Port gewählt", 6000)
@@ -1231,6 +1248,25 @@ class MainWindow(QMainWindow):
         self.config.port = port
         self._save_config()
         log.info("Port selected: %s", port or "-")
+        self._refresh_all()
+
+    def set_network_connection(self, kind: str, host: str, tcp_port: int) -> None:
+        """Connection type (COM / TCP / RFC 2217) and Ethernet adapter address."""
+        if self.busy:
+            return
+        kind_value = ConnectionKind(kind)
+        if (kind_value.value, host.strip(), tcp_port) == (
+            self.config.connection_kind,
+            self.config.network_host,
+            self.config.network_port,
+        ):
+            return
+        self._close_retained()
+        self.config.connection_kind = kind_value.value
+        self.config.network_host = host.strip()
+        self.config.network_port = tcp_port
+        self._save_config()
+        log.info("Connection type %s (%s)", kind_value.value, self.port_label)
         self._refresh_all()
 
     def set_scenario(self, scenario_id: str) -> None:

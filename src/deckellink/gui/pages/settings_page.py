@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
@@ -27,12 +28,14 @@ from deckellink.domain.models import Profile, VerificationStatus
 from deckellink.gui.widgets.error_panel import ErrorPanel
 from deckellink.gui.widgets.profile_editor import ProfileEditor
 from deckellink.simulation.scenarios import SCENARIOS, get_scenario
+from deckellink.transport.network_transport import ConnectionKind
 from deckellink.transport.serial_transport import PortInfo
 
 
 class SettingsPage(QWidget):
     simulation_toggled = Signal(bool)
     port_selected = Signal(str)
+    network_changed = Signal(str, str, int)
     refresh_ports_requested = Signal()
     scenario_selected = Signal(str)
     profile_selected = Signal(str)
@@ -58,7 +61,7 @@ class SettingsPage(QWidget):
         conn_form = QFormLayout(conn)
         mode_row = QHBoxLayout()
         self.sim_radio = QRadioButton("Simulationsmodus (keine Maschine)")
-        self.real_radio = QRadioButton("Realbetrieb über COM-Port")
+        self.real_radio = QRadioButton("Realbetrieb (COM-Port oder Netzwerkadapter)")
         group = QButtonGroup(self)
         group.addButton(self.sim_radio)
         group.addButton(self.real_radio)
@@ -67,6 +70,16 @@ class SettingsPage(QWidget):
         mode_row.addWidget(self.real_radio)
         mode_row.addStretch(1)
         conn_form.addRow("Betriebsart:", mode_row)
+        self.kind_combo = QComboBox()
+        for kind in ConnectionKind:
+            self.kind_combo.addItem(kind.label, kind.value)
+        self.kind_combo.setAccessibleName("Verbindungsart")
+        self.kind_combo.setToolTip(
+            "COM-Port: lokaler oder virtueller COM-Port (auch Treiber eines Netzwerkadapters). "
+            "TCP: RS-232/Ethernet-Adapter im TCP-Server-Modus. RFC 2217: Adapter mit Telnet COM Port Control."
+        )
+        self.kind_combo.currentIndexChanged.connect(self._network_edited)
+        conn_form.addRow("Verbindungsart:", self.kind_combo)
         port_row = QHBoxLayout()
         self.port_combo = QComboBox()
         self.port_combo.setEditable(True)
@@ -78,6 +91,22 @@ class SettingsPage(QWidget):
         self.refresh_ports.clicked.connect(self.refresh_ports_requested.emit)
         port_row.addWidget(self.refresh_ports)
         conn_form.addRow("COM-Port:", port_row)
+        net_row = QHBoxLayout()
+        self.host_edit = QLineEdit()
+        self.host_edit.setPlaceholderText("z. B. 192.168.0.50")
+        self.host_edit.setAccessibleName("IP-Adresse des Netzwerkadapters")
+        self.host_edit.editingFinished.connect(self._network_edited)
+        net_row.addWidget(self.host_edit, 1)
+        net_row.addWidget(QLabel("TCP-Port:"))
+        self.net_port_spin = QSpinBox()
+        self.net_port_spin.setRange(1, 65535)
+        self.net_port_spin.setAccessibleName("TCP-Port des Netzwerkadapters")
+        self.net_port_spin.editingFinished.connect(self._network_edited)
+        net_row.addWidget(self.net_port_spin)
+        conn_form.addRow("Netzwerkadapter:", net_row)
+        self.network_hint = QLabel()
+        self.network_hint.setWordWrap(True)
+        conn_form.addRow("", self.network_hint)
         self.scenario_combo = QComboBox()
         for scenario in SCENARIOS:
             self.scenario_combo.addItem(scenario.title, scenario.id)
@@ -168,6 +197,9 @@ class SettingsPage(QWidget):
         self.sim_radio.setChecked(config.simulation_mode)
         self.real_radio.setChecked(not config.simulation_mode)
         self.port_combo.setEditText(config.port)
+        self.kind_combo.setCurrentIndex(max(self.kind_combo.findData(config.connection_kind), 0))
+        self.host_edit.setText(config.network_host)
+        self.net_port_spin.setValue(config.network_port)
         index = self.scenario_combo.findData(config.simulation_scenario)
         self.scenario_combo.setCurrentIndex(max(index, 0))
         self.scenario_description.setText(get_scenario(config.simulation_scenario).description)
@@ -225,9 +257,34 @@ class SettingsPage(QWidget):
     # --- slots ----------------------------------------------------------------------
     def _update_mode_widgets(self) -> None:
         sim = self.sim_radio.isChecked()
+        kind = ConnectionKind(str(self.kind_combo.currentData() or "serial"))
         self.scenario_combo.setEnabled(sim)
-        self.port_combo.setEnabled(not sim)
-        self.refresh_ports.setEnabled(not sim)
+        self.kind_combo.setEnabled(not sim)
+        self.port_combo.setEnabled(not sim and not kind.is_network)
+        self.refresh_ports.setEnabled(not sim and not kind.is_network)
+        self.host_edit.setEnabled(not sim and kind.is_network)
+        self.net_port_spin.setEnabled(not sim and kind.is_network)
+        hints = {
+            ConnectionKind.SERIAL: "",
+            ConnectionKind.TCP: (
+                "TCP-Rohdaten: Baudrate, Datenformat und Handshake im Adapter einstellen (müssen zum Profil "
+                "passen). Modemleitungen (CTS/DSR) sind nicht sichtbar - Profile mit CTS-Prüfung sind hier "
+                "nicht nutzbar. Viele Adapter erlauben nur eine gleichzeitige Verbindung."
+            ),
+            ConnectionKind.RFC2217: (
+                "RFC 2217: DeckelLink überträgt Baudrate, Datenformat und Steuerleitungen an den Adapter; "
+                "der Adapter muss RFC 2217 unterstützen."
+            ),
+        }
+        self.network_hint.setText(hints[kind])
+        self.network_hint.setVisible(bool(hints[kind]))
+
+    def _network_edited(self, *_args: object) -> None:
+        self._update_mode_widgets()
+        if not self._loading:
+            self.network_changed.emit(
+                str(self.kind_combo.currentData()), self.host_edit.text().strip(), self.net_port_spin.value()
+            )
 
     def _mode_toggled(self, _checked: bool) -> None:
         self._update_mode_widgets()

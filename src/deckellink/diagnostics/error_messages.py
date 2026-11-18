@@ -17,9 +17,11 @@ from deckellink.transfer.lsv2 import (
 from deckellink.transport.base import (
     ConnectionLostError,
     HandshakeTimeoutError,
+    NetworkUnreachableError,
     PortBusyError,
     PortNotFoundError,
     PortOpenError,
+    TransportConfigurationError,
     TransportReadError,
     TransportTimeoutError,
     TransportWriteError,
@@ -60,6 +62,18 @@ def describe_error(
             "Der ausgewählte COM-Port existiert nicht mehr (andere COM-Nummer nach Neustecken).",
             "Der Gerätetreiber ist nicht installiert.",
         )
+    elif isinstance(exc, NetworkUnreachableError):
+        title = f"Der Netzwerkadapter {port_label} ist nicht erreichbar."
+        causes = (
+            "IP-Adresse oder TCP-Port falsch (Adapter-Konfiguration prüfen).",
+            "Adapter ausgeschaltet, nicht im selben Netz oder Netzwerkkabel getrennt.",
+            "Adapter nicht im Modus 'TCP-Server' bzw. RFC 2217.",
+            "Eine andere Anwendung ist bereits mit dem Adapter verbunden (oft nur eine Verbindung erlaubt).",
+            "Firewall blockiert die Verbindung.",
+        )
+    elif isinstance(exc, TransportConfigurationError):
+        title = "Die Einstellungen passen nicht zur gewählten Verbindungsart."
+        causes = (str(exc),)
     elif isinstance(exc, PortOpenError):
         title = f"{port_label} konnte nicht geöffnet werden."
         causes = _PORT_OPEN_CAUSES
