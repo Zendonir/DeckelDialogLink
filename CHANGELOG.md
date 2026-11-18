@@ -4,7 +4,10 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionier
 
 ## [0.4.0] – 2026-11-18
 
+Erster veröffentlichter Stand (Vorabversion). **Nur gegen den Simulator getestet – keine reale DIALOG 11 geprüft.**
+
 ### Hinzugefügt
+- Windows-Installer (Inno Setup): Installation ohne Administratorrechte, Startmenü-Einträge (normal und Simulationsmodus), optionales Desktop-Symbol, Deinstallation ohne Löschen der Benutzerdaten; portable ZIP-Version und SHA-256-Prüfsummen.
 - Unterstützung für RS-232/Ethernet-Adapter: Verbindungsart TCP-Rohdaten (TCP-Server-Modus) und RFC 2217, wählbar in den Einstellungen; virtuelle COM-Ports von Hersteller-Treibern weiterhin als COM-Port.
 - Verständliche Fehlermeldungen für nicht erreichbare Adapter und unpassende Einstellungen (CTS-Prüfung bei TCP-Rohdaten).
 - Tests gegen einen lokalen TCP-Testserver (Senden/Empfangen, auch über die GUI).

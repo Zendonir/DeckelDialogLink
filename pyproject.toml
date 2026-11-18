@@ -100,7 +100,7 @@ ignore = [
 python_version = "3.12"
 strict = true
 mypy_path = "src"
-files = ["src", "tests"]
+files = ["src", "tests", "tools"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]

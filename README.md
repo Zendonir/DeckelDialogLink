@@ -143,6 +143,10 @@ pytest --cov=deckellink
 
 Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 302 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
 
+## Installation (Windows)
+
+Installer `DeckelLink-<version>-Setup-x64.exe` von der GitHub-Release-Seite herunterladen und ausführen – keine Administratorrechte nötig. Alternativ die portable ZIP-Version. Details: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
 ## Windows-Build
 
 ```bash

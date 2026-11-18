@@ -38,8 +38,8 @@ def render(size: int) -> QImage:
 def main() -> int:
     QGuiApplication(sys.argv)
     TARGET.mkdir(parents=True, exist_ok=True)
-    render(256).save(str(TARGET / "deckellink.png"), "PNG")
-    if not render(256).save(str(TARGET / "deckellink.ico"), "ICO"):
+    render(256).save(str(TARGET / "deckellink.png"), b"PNG")
+    if not render(256).save(str(TARGET / "deckellink.ico"), b"ICO"):
         print("ICO writer not available", file=sys.stderr)
         return 1
     print(f"Icons written to {TARGET}")

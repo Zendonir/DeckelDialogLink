@@ -1,0 +1,13 @@
+﻿DeckelLink – NC-Datenübertragung für DECKEL FP2A / DIALOG 11
+
+Bitte vor der Installation lesen:
+
+• DeckelLink überträgt ausschließlich Daten (NC-Programme, Nachladebetrieb über LSV2, Maschinenparameter als Datei). Die Software startet keine Programme, bewegt keine Achsen und schaltet keine Betriebsarten um.
+
+• Diese Version ist eine VORABVERSION. Die Kommunikationsparameter und Protokolle der DIALOG 11 sind NICHT an einer realen Maschine verifiziert. Alle Tests erfolgten mit dem eingebauten Simulator.
+
+• Nach der Installation startet DeckelLink im Simulationsmodus. Für den Realbetrieb lesen Sie bitte die Inbetriebnahme-Anleitung (docs/COMMISSIONING.md im Projekt).
+
+• Die Installation benötigt keine Administratorrechte. Ihre Daten (Einstellungen, Profile, empfangene Programme, Parametersicherungen, Protokolle) liegen unter %LOCALAPPDATA%\DeckelLink und bleiben bei Aktualisierung und Deinstallation erhalten.
+
+Die Software wird ohne Gewährleistung unter der MIT-Lizenz bereitgestellt.

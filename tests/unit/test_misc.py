@@ -73,11 +73,12 @@ def test_clocks() -> None:
     assert system.sleep(0.001) is False
     assert system.sleep(1, event) is True
     assert system.now().tzinfo is not None
-    scaled = ScaledClock(1000)
+    # Real sleep of 50 ms: well above the ~15.6 ms timer resolution on Windows.
+    scaled = ScaledClock(20)
     t0 = scaled.monotonic()
     scaled.sleep(1.0)
-    assert scaled.monotonic() - t0 >= 0.9
-    assert scaled.scale == 1000
+    assert scaled.monotonic() - t0 >= 0.6
+    assert scaled.scale == 20
     assert scaled.now().tzinfo is not None
     with pytest.raises(ValueError, match="positive"):
         ScaledClock(0)
