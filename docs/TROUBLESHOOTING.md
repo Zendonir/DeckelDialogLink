@@ -39,6 +39,11 @@ Zu jedem Fehler zeigt DeckelLink eine verständliche Meldung mit möglichen Ursa
 
 Im Terminal erscheinen Steuerzeichen lesbar als `<ENQ>`, `<DLE>`, `<STX>`, `<ETX>`, `<EOT>`, `<NAK>`.
 
+## Maschinenparameter
+- „Schreiben gesperrt: …" nennt alle fehlenden Voraussetzungen (Profilfreigabe, Sitzungsfreischaltung, aktuelle Sicherung, Prüffehler, keine Änderungen).
+- „Keine Parameter empfangen": Parameterausgabe an der CNC nicht gestartet oder Wartezeit (`parameters.first_byte_timeout_ms`) zu kurz.
+- Kontrolle meldet „ABWEICHUNG": Steuerung hat die Datei nicht oder nur teilweise übernommen – Parameter an der CNC prüfen, Maschine nicht verfahren.
+
 ## Loopback-Test schlägt fehl
 - TX und RX nicht gebrückt; falscher COM-Port; Port belegt.
 - Bei RTS/CTS-Profil zusätzlich RTS–CTS brücken.

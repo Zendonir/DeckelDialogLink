@@ -30,6 +30,10 @@ Mit einem LSV2-Profil (mitgeliefert: *DIALOG 11 – LSV2 4800 7E1 (Nachladebetri
 
 Rahmung, BCC-Bildung, Telegramminhalt, Start-/Endtelegramme und Timeouts sind im Profil (Reiter *Protokoll (LSV2)*) einstellbar, weil die genaue LSV2-Umsetzung der DIALOG 11 nicht verifiziert ist ([docs/DIALOG11.md](docs/DIALOG11.md)). Simulator-Szenarien `LSV2: …` testen Nachladebetrieb, NAK, verlorene Quittungen, WACK, CNC-Abbruch und Verbindungsabbruch.
 
+## Maschinenparameter
+
+Seite *Maschinenparameter*: Parameter auslesen (der Bediener startet die Ausgabe an der CNC) und als unveränderliche, versionierte Sicherung mit SHA-256 ablegen, Parametersätze vergleichen (Diff) und – mehrfach abgesichert – eine Parameterdatei in die an der CNC freigegebene Parametereingabe schreiben. Schreiben ist standardmäßig gesperrt und erfordert Profilfreigabe, Freischaltung pro Sitzung, eine aktuelle Sicherung, einen Diff sowie die getippte Bestätigung `PARAMETER SCHREIBEN`; danach wird durch erneutes Auslesen kontrolliert. Es werden keine Fernbefehle gesendet; das Parameterformat der DIALOG 11 ist nicht verifiziert. Details: [docs/PARAMETERS.md](docs/PARAMETERS.md).
+
 ## Unterstützte Betriebssysteme
 
 | System | Status |
@@ -133,7 +137,7 @@ mypy
 pytest --cov=deckellink
 ```
 
-Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 268 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
+Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 291 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
 
 ## Windows-Build
 
@@ -156,6 +160,7 @@ Ergebnis ist ein **portabler Onedir-Ordner** `dist/DeckelLink/` (ohne Python-Ins
 | [VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md) | An der realen FP2A zu prüfende Punkte |
 | [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Fehlerbilder und Abhilfe |
 | [SAFETY.md](docs/SAFETY.md) | Sicherheitskonzept |
+| [PARAMETERS.md](docs/PARAMETERS.md) | Maschinenparameter auslesen, vergleichen, schreiben |
 | [INSTALLATION.md](docs/INSTALLATION.md) | Installation, Build, Datenverzeichnisse |
 
 ## Lizenz

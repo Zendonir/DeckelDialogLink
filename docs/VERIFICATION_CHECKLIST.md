@@ -37,6 +37,13 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 | 31 | Maximale Zeit zwischen zwei Satzanforderungen im Nachladebetrieb | 10 min | `protocol.drip_feed_ack_timeout_ms` | offen |
 | 32 | Verhalten der CNC bei Abbruch (EOT vom PC, EOT von der CNC) und bei Unterbrechung der Datenzufuhr | PC sendet EOT bei Abbruch | `protocol.send_eot_on_cancel` | offen |
 | 33 | Programmausgabe der CNC per LSV2 (Empfang) | ENQ von der CNC, Ende mit EOT | – | offen |
+| 34 | Kann die DIALOG 11 Maschinenparameter über V.24 ausgeben bzw. einlesen? Bedienfolge an der Steuerung | angenommen: ja, vom Bediener ausgelöst | – | offen |
+| 35 | Format der Parameterdatei (Kopf, Kennung, Zeilenaufbau, Ende) | unbekannt – unverändert übernommen | `parameters.identification_pattern` | offen |
+| 36 | Ende der Parameterausgabe | Inaktivität 5 s bzw. EOT (LSV2) | `parameters.inactivity_timeout_ms` | offen |
+| 37 | Schutz der Parametereingabe (Schlüsselschalter, Schlüsselzahl, Betriebsart) | muss an der CNC freigegeben werden | – | offen |
+| 38 | Akzeptiert die Steuerung eine vollständige Parameterdatei oder nur Teilmengen? | vollständige Datei | – | offen |
+| 39 | Verhalten der Steuerung bei fehlerhafter oder abgebrochener Parametereingabe | unbekannt | – | offen |
+| 40 | Gleiche Schnittstellenparameter/Protokoll wie für NC-Programme? | ja (gleiches Profil) | `serial.*`, `protocol.*` | offen |
 
 ## Protokoll der Verifikation
 

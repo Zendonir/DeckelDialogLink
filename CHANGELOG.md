@@ -2,6 +2,18 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.3.0] – 2026-11-18
+
+**Nur gegen den Simulator getestet.**
+
+### Hinzugefügt
+- Seite „Maschinenparameter": Auslesen als versionierte Sicherung (SHA-256, Rohdaten, Metadaten), Vergleich (Diff), Schreiben einer Parameterdatei in die an der CNC freigegebene Parametereingabe – über Klartext oder LSV2.
+- Schreibschutz: Profilfreigabe `parameters.allow_write` (Standard aus), Freischaltung nur pro Sitzung, aktuelle Sicherung (≤ 60 min, gleiches Profil/Anschluss), Prüfung und Diff, getippte Bestätigung, automatische Kontrolle beim erneuten Auslesen.
+- Profilabschnitt `parameters` (optional) und Reiter im Profil-Editor; Dokumentation `docs/PARAMETERS.md`.
+
+### Nicht enthalten
+- Fernbefehle zum Lesen/Ändern einzelner Parameter (Format/Befehle der DIALOG 11 nicht dokumentiert).
+
 ## [0.2.0] – 2026-11-18
 
 **Nur gegen den Simulator getestet.**

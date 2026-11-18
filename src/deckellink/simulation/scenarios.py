@@ -25,6 +25,14 @@ SAMPLE_PROGRAM = (
     b"N110 M30\r\n"
 )
 
+# Clearly artificial parameter list for the simulator. This is NOT the DIALOG 11
+# parameter format (which is not verified) - it only exercises the data path.
+SAMPLE_PARAMETERS = (
+    b"(SIMULIERTE MASCHINENPARAMETER - KEIN ECHTES DIALOG-11-FORMAT)\r\n"
+    + b"".join(b"P%04d=%d\r\n" % (n, (n * 37) % 1000) for n in range(1, 41))
+    + b"(ENDE SIMULATION)\r\n"
+)
+
 INVALID_PROGRAM = b"(PROGRAMM MIT UNG\xdcLTIGEN ZEICHEN)\r\nN10 G90\r\nN20 G00 X10 Y10 \x1b\r\nN30 M30\r\n"
 
 

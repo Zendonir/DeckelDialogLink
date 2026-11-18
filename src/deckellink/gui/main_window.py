@@ -43,8 +43,10 @@ from deckellink.domain.states import ReceiveState, SendState
 from deckellink.gui.dialogs.confirm_transfer import ConfirmInfo, ConfirmOutcome, ask_confirmation
 from deckellink.gui.dialogs.export_dialog import ExportDialog
 from deckellink.gui.dialogs.loopback_dialog import LoopbackDialog
+from deckellink.gui.dialogs.parameter_write_dialog import ParameterWriteInfo, ask_parameter_write
 from deckellink.gui.pages.diagnostics_page import DiagnosticsPage
 from deckellink.gui.pages.log_page import LogPage, QtLogHandler
+from deckellink.gui.pages.parameters_page import ParametersPage
 from deckellink.gui.pages.programs_page import ProgramsPage
 from deckellink.gui.pages.receive_page import ReceivePage
 from deckellink.gui.pages.settings_page import SettingsPage
@@ -61,12 +63,25 @@ from deckellink.gui.workers import Job, TaskCallbacks, TaskHandle
 from deckellink.logging.setup import set_level
 from deckellink.nc.analyzer import analyze
 from deckellink.nc.transformer import TransformError, transform
+from deckellink.parameters.archive import ParameterArchive, StoredParameterSet
+from deckellink.parameters.service import (
+    ParameterBackupInfo,
+    ParameterCandidate,
+    ParameterWriteGate,
+    analyze_parameters,
+    diff_parameters,
+    evaluate_parameter_write_gate,
+    parameter_profile,
+    prepare_parameter_payload,
+)
+from deckellink.parameters.transfer import read_parameters, write_parameters
 from deckellink.power import keep_system_awake
 from deckellink.profiles.loader import builtin_profiles_dir
 from deckellink.profiles.repository import ProfileRepository, ProfileRepositoryError
 from deckellink.profiles.schema import parse_profile
+from deckellink.safety import PARAMETER_WRITE_NOTICE
 from deckellink.simulation.lsv2_cnc import Lsv2SimulatedCnc
-from deckellink.simulation.scenarios import SAMPLE_PROGRAM, Scenario, get_scenario, lsv2_config_for
+from deckellink.simulation.scenarios import SAMPLE_PARAMETERS, SAMPLE_PROGRAM, Scenario, get_scenario, lsv2_config_for
 from deckellink.storage.archive import ReceiveArchive, StoredReceive, export_copy
 from deckellink.storage.backup import BackupManager
 from deckellink.storage.files import sanitize_stem, unique_path, write_new_file
@@ -87,6 +102,7 @@ NAV_ITEMS = (
     "Übertragen",
     "Empfangen",
     "NC-Programme",
+    "Maschinenparameter",
     "Terminal",
     "Diagnose",
     "Einstellungen",
@@ -100,6 +116,9 @@ TASK_SEND = "Senden"
 TASK_RECEIVE = "Empfangen"
 TASK_LOOPBACK = "Loopback-Test"
 TASK_MONITOR = "Diagnose"
+TASK_PARAM_READ = "Parameter auslesen"
+TASK_PARAM_WRITE = "Parameter schreiben"
+PARAMETER_FILE_FILTER = "Parameterdateien (*.par *.txt *.TXT *.prm);;Alle Dateien (*)"
 
 
 class MainWindow(QMainWindow):
@@ -133,6 +152,12 @@ class MainWindow(QMainWindow):
         self._last_failed = False
         self._busy_text = ""
         self.confirm: ConfirmFn = ask_confirmation
+        self.confirm_parameter_write: Callable[[ParameterWriteInfo, QWidget | None], bool] = ask_parameter_write
+        self.param_archive = ParameterArchive(paths.root)
+        self.param_unlocked = False  # session only, never persisted
+        self.param_backup: ParameterBackupInfo | None = None
+        self.param_candidate: ParameterCandidate | None = None
+        self.last_written_parameters: bytes | None = None
         self.loopback_dialog: LoopbackDialog | None = None
 
         self.setWindowTitle(f"{APP_NAME} {__version__} - DECKEL FP2A / DIALOG 11")
@@ -148,6 +173,7 @@ class MainWindow(QMainWindow):
         self._refresh_profiles()
         self._apply_raw_logging(config.raw_traffic_logging)
         self.refresh_programs()
+        self.refresh_parameter_sets()
         self._refresh_all()
 
         for problem in self.repo.problems:
@@ -183,7 +209,7 @@ class MainWindow(QMainWindow):
         body.setContentsMargins(0, 0, 0, 0)
         self.nav = QListWidget()
         self.nav.setObjectName("Navigation")
-        self.nav.setFixedWidth(190)
+        self.nav.setFixedWidth(230)
         self.nav.setAccessibleName("Hauptnavigation")
         for index, name in enumerate(NAV_ITEMS, start=1):
             self.nav.addItem(f"{index}  {name}")
@@ -196,6 +222,7 @@ class MainWindow(QMainWindow):
         self.transfer_page = TransferPage()
         self.receive_page = ReceivePage()
         self.programs_page = ProgramsPage()
+        self.parameters_page = ParametersPage()
         self.terminal_page = TerminalPage(self.terminal)
         self.diagnostics_page = DiagnosticsPage()
         self.settings_page = SettingsPage()
@@ -204,6 +231,7 @@ class MainWindow(QMainWindow):
             self.transfer_page,
             self.receive_page,
             self.programs_page,
+            self.parameters_page,
             self.terminal_page,
             self.diagnostics_page,
             self.settings_page,
@@ -234,6 +262,16 @@ class MainWindow(QMainWindow):
         pp.open_folder_requested.connect(lambda: self._open_folder(self.paths.received))
         pp.export_requested.connect(self.export_program)
         pp.load_for_send_requested.connect(self.load_for_send)
+
+        mp = self.parameters_page
+        mp.read_requested.connect(self.start_parameter_read)
+        mp.cancel_requested.connect(self.cancel_task)
+        mp.open_folder_requested.connect(lambda: self._open_folder(self.param_archive.directory))
+        mp.unlock_toggled.connect(self.set_parameter_write_unlocked)
+        mp.compare_requested.connect(self.compare_parameter_set)
+        mp.select_requested.connect(self.select_parameter_file)
+        mp.load_external_requested.connect(self.load_external_parameter_file)
+        mp.write_requested.connect(self.start_parameter_write)
 
         self.terminal_page.file_logging_toggled.connect(self._terminal_file_logging_toggled)
 
@@ -288,12 +326,15 @@ class MainWindow(QMainWindow):
         if self.simulation:
             if purpose == "loopback":
                 return LoopbackTransport(serial, self._clock())
-            if self.profile.protocol.is_lsv2 and purpose in ("send", "receive", "dripfeed"):
-                lsv2_config = lsv2_config_for(
-                    self.scenario(), receive=purpose == "receive", drip_feed=purpose == "dripfeed"
-                )
+            receiving = purpose in ("receive", "param_read")
+            if self.profile.protocol.is_lsv2 and purpose != "monitor":
+                lsv2_config = lsv2_config_for(self.scenario(), receive=receiving, drip_feed=purpose == "dripfeed")
+                if purpose == "param_read":
+                    lsv2_config = replace(lsv2_config, program=SAMPLE_PARAMETERS)
                 return Lsv2SimulatedCnc(serial, self.profile.protocol, lsv2_config, self._clock())
             config = self.scenario().config
+            if purpose == "param_read":
+                config = replace(config, machine_program=SAMPLE_PARAMETERS)
             if purpose == "receive" and not config.machine_program:
                 config = replace(config, machine_program=SAMPLE_PROGRAM)
             return SimulatedTransport(serial, config, self._clock())
@@ -354,6 +395,9 @@ class MainWindow(QMainWindow):
         monitoring = self.task is not None and self.task.name == TASK_MONITOR
         self.diagnostics_page.set_busy(self.busy, monitoring)
         self.settings_page.setEnabled(not self.busy)
+        param_task = self.task is not None and self.task.name in (TASK_PARAM_READ, TASK_PARAM_WRITE)
+        self.parameters_page.set_busy(self.busy, param_task)
+        self._refresh_parameter_gate()
 
     def _refresh_header_status(self) -> None:
         if self.task is not None:
@@ -422,6 +466,8 @@ class MainWindow(QMainWindow):
         page_panel = {
             TASK_SEND: self.transfer_page.error_panel,
             TASK_RECEIVE: self.receive_page.error_panel,
+            TASK_PARAM_READ: self.parameters_page.error_panel,
+            TASK_PARAM_WRITE: self.parameters_page.error_panel,
         }.get(handle.name, self.diagnostics_page.error_panel)
         page_panel.show_error(error)
         if handle.name == TASK_MONITOR:
@@ -454,6 +500,8 @@ class MainWindow(QMainWindow):
         self._write_entries(entries)
         if self.task is not None and self.task.name == TASK_RECEIVE:
             self.receive_page.append_data(event.data)
+        if self.task is not None and self.task.name == TASK_PARAM_READ:
+            self.parameters_page.set_received_bytes(self.terminal.rx_bytes)
         self.diagnostics_page.set_counters(self.terminal.tx_bytes, self.terminal.rx_bytes)
 
     def _flush_terminal(self) -> None:
@@ -759,6 +807,266 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(text, 10000)
 
     # ----------------------------------------------------------- programs
+    # ----------------------------------------------------------- machine parameters
+    def refresh_parameter_sets(self) -> None:
+        self.parameters_page.set_sets(self.param_archive.list_sets())
+
+    def _refresh_parameter_gate(self) -> None:
+        gate = self._parameter_gate()
+        self.parameters_page.apply_gate(gate)
+
+    def _parameter_gate(self) -> ParameterWriteGate:
+        return evaluate_parameter_write_gate(
+            profile=self.profile,
+            session_unlocked=self.param_unlocked,
+            candidate=self.param_candidate,
+            backup=self.param_backup,
+            now=datetime.now().astimezone(),
+            port_label=self.port_label,
+            simulation=self.simulation,
+            port=self.config.port,
+            busy=self.busy,
+        )
+
+    def set_parameter_write_unlocked(self, enabled: bool, *, confirm: bool = True) -> None:
+        if enabled and confirm:
+            answer = QMessageBox.warning(
+                self,
+                "Schreiben von Maschinenparametern freischalten",
+                PARAMETER_WRITE_NOTICE + "\n\nSchreibfunktion für diese Sitzung freischalten?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                enabled = False
+        self.param_unlocked = enabled
+        self.parameters_page.set_unlocked(enabled)
+        log.warning("Parameter write %s for this session", "UNLOCKED" if enabled else "locked")
+        self._refresh_parameter_gate()
+
+    def start_parameter_read(self) -> None:
+        gate = evaluate_receive_gate(simulation=self.simulation, port=self.config.port, busy=self.busy)
+        if not gate.allowed:
+            self.statusBar().showMessage(f"Parameter auslesen nicht möglich: {gate.reason_text}", 8000)
+            return
+        self._close_retained()
+        profile = self.profile
+        transport = self._make_transport("param_read")
+        clock = self._clock()
+        archive = self.param_archive
+        self.parameters_page.error_panel.clear()
+        self.parameters_page.verify_label.setVisible(False)
+        self.terminal.reset_counters()
+        log.info("Parameter read started (profile=%s, port=%s)", profile.id, self.port_label)
+
+        def job(cb: TaskCallbacks, token: CancellationToken) -> object:
+            callbacks = ReceiveCallbacks(on_state=cb.state, on_traffic=cb.traffic, on_modem=cb.modem)
+            result = read_parameters(transport, profile, clock=clock, token=token, callbacks=callbacks)
+            program: ReceivedProgram | None = None
+            stored: StoredParameterSet | None = None
+            store_error: UserFacingError | None = None
+            if result.raw:
+                program = process_received(result, parameter_profile(profile))
+                try:
+                    stored = archive.store(result, program, profile)
+                except OSError as exc:
+                    store_error = describe_error(exc, operation="Parameter speichern")
+            return (result, program, stored, store_error)
+
+        self._start_task(TASK_PARAM_READ, job, finished=self._parameter_read_finished, state=self._parameter_state)
+
+    def _parameter_state(self, state: object) -> None:
+        label = getattr(state, "label", str(state))
+        self.parameters_page.state.set_status(StatusKind.ACTIVE, label)
+        self._busy_text = f"Parameter: {label}"
+        self._record_state(f"Parameter: {label}")
+
+    def _parameter_read_finished(
+        self,
+        payload: tuple[ReceiveResult, ReceivedProgram | None, StoredParameterSet | None, UserFacingError | None],
+    ) -> None:
+        result, program, stored, store_error = payload
+        page = self.parameters_page
+        page.progress.setRange(0, 1000)
+        self.last_result = result.to_dict() | {"type": "parameter_read"}
+        if result.error is not None:
+            page.error_panel.show_error(result.error)
+        if store_error is not None:
+            page.error_panel.show_error(store_error)
+        if stored is None or program is None:
+            page.state.set_status(StatusKind.ERROR, f"Keine Parameter empfangen ({result.end_reason.label})")
+            self._last_failed = True
+        else:
+            complete = stored.complete
+            page.state.set_status(
+                StatusKind.READY if complete else StatusKind.WARNING,
+                f"Parameter gesichert: {stored.path.name}" + ("" if complete else " - UNVOLLSTÄNDIG/UNGEPRÜFT"),
+            )
+            page.progress.setValue(1000)
+            self.param_backup = ParameterBackupInfo(
+                path_name=stored.path.name,
+                data=program.normalized,
+                read_at=datetime.now().astimezone(),
+                profile_id=self.profile.id,
+                port=self.port_label,
+                complete=complete,
+            )
+            page.backup_label.setText(
+                f"Aktuelle Sicherung: {stored.path.name}, {len(program.normalized)} Bytes, "
+                f"SHA-256 {stored.sha256[:16]}…, ausgelesen {datetime.now():%H:%M:%S}"
+            )
+            if self.last_written_parameters is not None:
+                check = diff_parameters(self.last_written_parameters, program.normalized, "geschrieben", "ausgelesen")
+                page.verify_label.setVisible(True)
+                if check.identical:
+                    page.verify_label.set_status(
+                        StatusKind.READY, "Kontrolle: ausgelesene Parameter stimmen mit der geschriebenen Datei überein"
+                    )
+                else:
+                    page.verify_label.set_status(
+                        StatusKind.ERROR, f"Kontrolle: ABWEICHUNG zur geschriebenen Datei - {check.summary}"
+                    )
+                page.show_diff(check, "geschrieben ↔ ausgelesen")
+                log.info("Parameter verification after write: identical=%s", check.identical)
+                self.last_written_parameters = None
+            elif self.param_candidate is not None:
+                self._show_candidate_diff()
+        self.refresh_parameter_sets()
+
+    def compare_parameter_set(self, path: Path) -> None:
+        if self.param_backup is None:
+            self.parameters_page.show_diff(None, "nicht möglich - noch keine aktuelle Sicherung ausgelesen")
+            return
+        try:
+            data = path.read_bytes()
+        except OSError as exc:
+            self.parameters_page.error_panel.show_error(describe_error(exc, operation="Parameterdatei lesen"))
+            return
+        diff = diff_parameters(self.param_backup.data, data, self.param_backup.path_name, path.name)
+        self.parameters_page.show_diff(diff, f"{self.param_backup.path_name} ↔ {path.name}")
+
+    def select_parameter_file(self, path: Path) -> None:
+        try:
+            data = path.read_bytes()
+        except OSError as exc:
+            self.parameters_page.error_panel.show_error(describe_error(exc, operation="Parameterdatei lesen"))
+            return
+        analysis = analyze_parameters(data, self.profile)
+        payload = None
+        transform_error = None
+        if not analysis.has_errors:
+            try:
+                payload = prepare_parameter_payload(data, self.profile)
+            except TransformError as exc:
+                transform_error = str(exc)
+        self.param_candidate = ParameterCandidate(path.name, data, analysis, payload, transform_error)
+        log.info(
+            "Parameter file selected for write: %s (%d bytes, sha256=%s, errors=%d)",
+            path.name,
+            len(data),
+            analysis.sha256[:16],
+            len(analysis.errors),
+        )
+        self.parameters_page.show_candidate(self.param_candidate)
+        self._show_candidate_diff()
+        self._refresh_parameter_gate()
+
+    def _show_candidate_diff(self) -> None:
+        candidate = self.param_candidate
+        if candidate is None:
+            return
+        if self.param_backup is None:
+            self.parameters_page.show_diff(None, "zum Schreiben - erst Parameter auslesen (Sicherung)")
+            return
+        diff = diff_parameters(self.param_backup.data, candidate.data, self.param_backup.path_name, candidate.name)
+        self.parameters_page.show_diff(diff, f"Sicherung ↔ {candidate.name}")
+
+    def load_external_parameter_file(self) -> None:
+        name, _ = QFileDialog.getOpenFileName(
+            self, "Parameterdatei zum Schreiben wählen", str(self.param_archive.directory), PARAMETER_FILE_FILTER
+        )
+        if name:
+            self.select_parameter_file(Path(name))
+
+    def start_parameter_write(self) -> None:
+        gate = self._parameter_gate()
+        candidate = self.param_candidate
+        backup = self.param_backup
+        if not gate.allowed or candidate is None or candidate.payload is None or backup is None or gate.diff is None:
+            self.statusBar().showMessage(f"Parameter schreiben gesperrt: {gate.reason_text}", 10000)
+            return
+        info = ParameterWriteInfo(
+            simulation=self.simulation,
+            port=self.port_label,
+            profile_name=self.profile.display_name,
+            protocol=self.profile.protocol.mode.label,
+            file_name=candidate.name,
+            sha256=candidate.analysis.sha256,
+            backup_name=backup.path_name,
+            backup_age_min=(datetime.now().astimezone() - backup.read_at).total_seconds() / 60,
+            diff=gate.diff,
+        )
+        if not self.confirm_parameter_write(info, self):
+            log.info("Parameter write not confirmed")
+            self.statusBar().showMessage("Parameter wurden nicht geschrieben", 6000)
+            return
+        log.warning(
+            "PARAMETER WRITE confirmed: file=%s sha256=%s backup=%s changes=%s mode=%s port=%s profile=%s",
+            candidate.name,
+            candidate.analysis.sha256,
+            backup.path_name,
+            gate.diff.summary,
+            "simulation" if self.simulation else "REAL",
+            self.port_label,
+            self.profile.id,
+        )
+        self._close_retained()
+        profile = self.profile
+        payload = candidate.payload
+        written = candidate.data
+        transport = self._make_transport("param_write")
+        clock = self._clock()
+        self.parameters_page.error_panel.clear()
+        self.parameters_page.progress.setValue(0)
+
+        def job(cb: TaskCallbacks, token: CancellationToken) -> object:
+            callbacks = SendCallbacks(
+                on_state=cb.state, on_progress=cb.progress, on_traffic=cb.traffic, on_modem=cb.modem
+            )
+            return write_parameters(transport, profile, payload, clock=clock, token=token, callbacks=callbacks)
+
+        def finished(result: SendResult) -> None:
+            page = self.parameters_page
+            self.last_result = result.to_dict() | {"type": "parameter_write"}
+            if result.state is SendState.COMPLETED:
+                self.last_written_parameters = written
+                # The backup no longer reflects the machine state: a new read is required.
+                self.param_backup = None
+                self.param_candidate = None
+                page.show_candidate(None)
+                page.backup_label.setText(
+                    "Aktuelle Sicherung: keine - Parameter wurden geschrieben. Bitte jetzt erneut auslesen "
+                    "und vergleichen (Kontrolle erfolgt automatisch)."
+                )
+                page.state.set_status(StatusKind.WARNING, "Parameter gesendet - jetzt zur Kontrolle erneut auslesen")
+            else:
+                self._last_failed = result.state is SendState.FAILED
+                page.state.set_status(
+                    StatusKind.ERROR if result.state is SendState.FAILED else StatusKind.WARNING, result.state.label
+                )
+                if result.error is not None:
+                    page.error_panel.show_error(result.error)
+                    self.diagnostics_page.last_error.setText(result.error.title)
+            log.warning("PARAMETER WRITE finished: state=%s bytes=%d", result.state.value, result.bytes_sent)
+
+        self._start_task(
+            TASK_PARAM_WRITE,
+            job,
+            finished=finished,
+            state=self._parameter_state,
+            progress=self.parameters_page.set_progress,
+        )
+
     def refresh_programs(self) -> None:
         self.programs_page.set_programs(self.archive.list_programs())
 
@@ -1062,6 +1370,7 @@ class MainWindow(QMainWindow):
             self.traffic_logger.close()
             self.traffic_logger = None
         logging.getLogger().removeHandler(self.log_handler)
+        self.param_unlocked = False
         self._save_config()
 
     def closeEvent(self, event: QCloseEvent) -> None:

@@ -31,7 +31,7 @@ def load_fixture(window: MainWindow, fixtures_dir: Path, tmp_path: Path, name: s
 
 def test_window_starts_in_visible_simulation_mode(make_window: WindowFactory) -> None:
     window = make_window()
-    assert window.nav.count() == len(NAV_ITEMS) == 7
+    assert window.nav.count() == len(NAV_ITEMS) == 8
     assert window.header.machine_label.text() == "DECKEL FP2A"
     assert window.header.control_label.text() == "DIALOG 11"
     assert "SIMULATIONSMODUS" in window.header.mode_banner.text()

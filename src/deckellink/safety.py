@@ -21,3 +21,11 @@ DRIP_FEED_NOTICE = (
     "Störungen an der Steuerung an. Der PC darf während des Nachladebetriebs nicht in den "
     "Energiesparmodus wechseln."
 )
+
+PARAMETER_WRITE_NOTICE = (
+    "MASCHINENPARAMETER: Falsche Parameter können Kollisionen, Schäden an Maschine und Werkstück sowie "
+    "Gefahren für Personen verursachen. DeckelLink prüft Parameter nicht inhaltlich - das Parameterformat "
+    "der DIALOG 11 ist nicht verifiziert. Schreiben Sie nur Parameter, deren Bedeutung Sie kennen, nach den "
+    "Vorgaben des Maschinenherstellers und mit Freigabe der verantwortlichen Person. Lesen Sie die Parameter "
+    "nach dem Schreiben erneut aus und vergleichen Sie sie, bevor die Maschine verfährt."
+)

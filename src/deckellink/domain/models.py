@@ -270,6 +270,24 @@ class ProtocolSettings:
 
 
 @dataclass(frozen=True)
+class ParameterSettings:
+    """Transfer of machine parameter files.
+
+    DeckelLink never changes parameters on its own. Reading requires the operator
+    to start the parameter output at the CNC; writing requires the authorised
+    operator to enable parameter input at the CNC. The parameter file format of
+    the DIALOG 11 is not verified - see ``docs/PARAMETERS.md``.
+    """
+
+    allow_write: bool = False
+    inactivity_timeout_ms: int = 5000
+    first_byte_timeout_ms: int = 120_000
+    max_bytes: int = 1_000_000
+    identification_pattern: str = ""
+    max_backup_age_min: int = 60
+
+
+@dataclass(frozen=True)
 class Profile:
     """A complete communication profile for one machine/control configuration."""
 
@@ -281,6 +299,7 @@ class Profile:
     transfer: TransferSettings = field(default_factory=TransferSettings)
     receive: ReceiveSettings = field(default_factory=ReceiveSettings)
     protocol: ProtocolSettings = field(default_factory=ProtocolSettings)
+    parameters: ParameterSettings = field(default_factory=ParameterSettings)
     description: str = ""
     schema_version: int = 1
     builtin: bool = field(default=False, compare=False)
@@ -302,6 +321,7 @@ class Profile:
             "transfer": _dataclass_to_dict(self.transfer),
             "receive": _dataclass_to_dict(self.receive),
             "protocol": _dataclass_to_dict(self.protocol),
+            "parameters": _dataclass_to_dict(self.parameters),
         }
 
 

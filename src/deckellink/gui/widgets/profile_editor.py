@@ -405,11 +405,64 @@ FIELDS = (
     FieldSpec("protocol", "send_eot_on_cancel", "Bei Abbruch EOT senden", "bool", ""),
 )
 
+FIELDS = (
+    *FIELDS,
+    FieldSpec(
+        "parameters",
+        "allow_write",
+        "Schreiben von Maschinenparametern erlauben",
+        "bool",
+        "Voraussetzung für das Schreiben. Zusätzlich sind Freischaltung pro Sitzung, aktuelle Sicherung "
+        "und getippte Bestätigung nötig.",
+    ),
+    FieldSpec(
+        "parameters",
+        "inactivity_timeout_ms",
+        "Ende der Parameterausgabe nach Inaktivität",
+        "int",
+        "",
+        200,
+        3_600_000,
+        suffix=" ms",
+    ),
+    FieldSpec(
+        "parameters",
+        "first_byte_timeout_ms",
+        "Max. Wartezeit auf Parameterausgabe",
+        "int",
+        "0 = unbegrenzt.",
+        0,
+        86_400_000,
+        suffix=" ms",
+    ),
+    FieldSpec(
+        "parameters", "max_bytes", "Maximale Größe Parameterdatei", "int", "", 1, 100 * 1024 * 1024, suffix=" Bytes"
+    ),
+    FieldSpec(
+        "parameters",
+        "identification_pattern",
+        "Erkennungsmuster Parameterdatei (Regex)",
+        "text",
+        "Optional. Dateien ohne Treffer werden nicht geschrieben. Format der DIALOG 11 nicht verifiziert.",
+    ),
+    FieldSpec(
+        "parameters",
+        "max_backup_age_min",
+        "Max. Alter der Sicherung vor dem Schreiben",
+        "int",
+        "",
+        1,
+        1440,
+        suffix=" min",
+    ),
+)
+
 SECTION_TITLES = {
     "serial": "Schnittstelle",
     "transfer": "Senden",
     "receive": "Empfangen",
     "protocol": "Protokoll (LSV2)",
+    "parameters": "Maschinenparameter",
 }
 
 

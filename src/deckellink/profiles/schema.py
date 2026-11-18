@@ -22,6 +22,7 @@ from deckellink.domain.models import (
     EndDetection,
     LineEnding,
     MachineInfo,
+    ParameterSettings,
     Parity,
     Profile,
     ProtocolMode,
@@ -127,6 +128,15 @@ PROTOCOL_RULES: dict[str, Rule] = {
     "send_eot_on_cancel": Rule(bool),
 }
 
+PARAMETER_RULES: dict[str, Rule] = {
+    "allow_write": Rule(bool),
+    "inactivity_timeout_ms": Rule(int, 200, 3_600_000),
+    "first_byte_timeout_ms": Rule(int, 0, 86_400_000),
+    "max_bytes": Rule(int, 1, MAX_BYTES_LIMIT),
+    "identification_pattern": Rule(str, max_length=200),
+    "max_backup_age_min": Rule(int, 1, 24 * 60),
+}
+
 KNOWN_TOP_LEVEL = {
     "schema_version",
     "id",
@@ -138,6 +148,7 @@ KNOWN_TOP_LEVEL = {
     "transfer",
     "receive",
     "protocol",
+    "parameters",
 }
 
 
@@ -294,8 +305,17 @@ def parse_profile(data: Any, source: str = "", *, builtin: bool = False) -> tupl
         "protocol", data.get("protocol"), PROTOCOL_RULES, ProtocolSettings, errors, warnings, required=False
     )
 
+    parameters = _parse_section(
+        "parameters", data.get("parameters"), PARAMETER_RULES, ParameterSettings, errors, warnings, required=False
+    )
+
     if isinstance(receive, ReceiveSettings):
         _check_receive_semantics(receive, errors)
+    if isinstance(parameters, ParameterSettings) and parameters.identification_pattern:
+        try:
+            re.compile(parameters.identification_pattern)
+        except re.error as exc:
+            errors.append(FieldError("parameters.identification_pattern", f"ungültiger regulärer Ausdruck: {exc}"))
 
     if errors:
         raise ProfileValidationError(errors, source)
@@ -309,6 +329,7 @@ def parse_profile(data: Any, source: str = "", *, builtin: bool = False) -> tupl
         transfer=transfer,
         receive=receive,
         protocol=protocol,
+        parameters=parameters,
         description=description,
         schema_version=SCHEMA_VERSION,
         builtin=builtin,
@@ -374,6 +395,11 @@ def safety_warnings(profile: Profile) -> list[str]:
         out.append("Tabulatoren werden unverändert gesendet - Verhalten der Steuerung unbekannt.")
     if not t.program_end.strip():
         out.append("Kein Programmende definiert - fehlendes Programmende wird nicht erkannt.")
+    if profile.parameters.allow_write:
+        out.append(
+            "Schreiben von Maschinenparametern ist in diesem Profil erlaubt. Falsche Parameter können "
+            "Maschine, Werkstück und Personen gefährden - das Parameterformat der DIALOG 11 ist nicht verifiziert."
+        )
     p = profile.protocol
     if p.is_lsv2:
         out.append(

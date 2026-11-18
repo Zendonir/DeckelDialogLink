@@ -4,7 +4,8 @@ DeckelLink ist ein Werkzeug für eine industrielle Maschinenumgebung. Es übertr
 
 ## Was DeckelLink nie tut
 - keinen CNC-Zyklus und keine Programmausführung starten oder freigeben,
-- keine Achsen bewegen, keine Maschinenmodi umschalten, keine Maschinenparameter ändern,
+- keine Achsen bewegen, keine Maschinenmodi umschalten,
+- Maschinenparameter aus eigenem Antrieb ändern oder Fernbefehle zum Lesen/Ändern von Parametern senden (Parameter werden nur als Datei in eine an der CNC freigegebene Parametereingabe übertragen),
 - keine sicherheitsrelevanten Maschinenfunktionen ansteuern,
 - keine Ausführungsbefehle an die CNC senden (das Terminal ist reine Anzeige),
 - nicht automatisch senden – weder beim Start noch nach Dateiauswahl,
@@ -39,6 +40,10 @@ Im Nachladebetrieb arbeitet die Maschine, während Daten übertragen werden. Zus
 | Abbruch | sendet EOT (konfigurierbar); **hält die Maschine nicht an** |
 
 > Ein Abbruch in DeckelLink, ein Kabel- oder PC-Fehler unterbricht nur die Datenzufuhr. Die Maschine wird dadurch nicht sicher angehalten – das muss an der Steuerung geschehen.
+
+## Maschinenparameter
+
+Schreiben ist mehrfach abgesichert (Details: [PARAMETERS.md](PARAMETERS.md)): Profilfreigabe (Standard aus), Freischaltung nur für die Sitzung, aktuelle Sicherung (≤ 60 min, gleiches Profil/Anschluss), Prüfung und Diff, getippte Bestätigung `PARAMETER SCHREIBEN`, anschließende Kontrolle durch erneutes Auslesen. Die Parametereingabe muss an der CNC durch eine berechtigte Person freigegeben werden – DeckelLink kann sie nicht freischalten.
 
 ## Sicherheitshinweis (Wortlaut)
 

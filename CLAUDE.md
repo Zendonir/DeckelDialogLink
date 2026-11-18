@@ -26,6 +26,7 @@ Diese Regeln gelten dauerhaft für alle Änderungen in diesem Repository.
 - **Keine erfundenen DIALOG-11-Protokolleigenschaften.** Unbekanntes bleibt konfigurierbar, mit konservativem Standard, gekennzeichnet im Code und in `docs/VERIFICATION_CHECKLIST.md`.
 - M30 nur als konfigurierbares Programmende; M82 nie ohne Profileinstellung.
 - Nachladebetrieb nur über LSV2 und nur CNC-gesteuert (nächstes Telegramm erst nach Quittung); DeckelLink startet nie die Bearbeitung. LSV2-Details (Rahmung, BCC, Telegramminhalt) bleiben konfigurierbar und unverifiziert, bis an der FP2A geprüft.
+- Maschinenparameter nur als Datei: Auslesen nach Ausgabe an der CNC, Schreiben nur in eine an der CNC freigegebene Parametereingabe. Keine Fernbefehle zum Lesen/Ändern von Parametern. Die Schreibsperren (Profil `parameters.allow_write` standardmäßig aus, Freischaltung nur pro Sitzung, aktuelle Sicherung, Diff, getippte Bestätigung, Kontrolle durch erneutes Auslesen) dürfen nicht abgeschwächt werden.
 - Mitgelieferte Profile (`src/deckellink/resources/profiles/`) bleiben `unverified`, bis eine Prüfung an der realen FP2A dokumentiert ist.
 
 ## Qualität – vor jedem Abschluss ausführen

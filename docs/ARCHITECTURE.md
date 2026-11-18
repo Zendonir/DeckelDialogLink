@@ -80,6 +80,18 @@ power.py                   verhindert Windows-Standby während des Nachladebetri
 
 Das Profil enthält den optionalen Abschnitt `protocol` (`mode: plain|lsv2`). Fehlt er, gilt Klartext – bestehende Profile bleiben gültig. Die GUI wählt Sender/Empfänger anhand von `profile.protocol.mode`. Der Nachladebetrieb unterscheidet sich vom Senden nur durch das lange Quittungs-Timeout, den Zustand `DRIP_FEEDING`, die eigene Bestätigung und die Standby-Sperre; das Tempo bestimmt die CNC über ihre Quittungen.
 
+## Maschinenparameter
+
+```
+parameters/service.py   Parameter-Transfereinstellungen (inhaltsneutral), Analyse, Diff,
+                        evaluate_parameter_write_gate (alle Schreibvoraussetzungen, reine Funktion)
+parameters/transfer.py  read_parameters / write_parameters über Klartext- oder LSV2-Logik
+parameters/archive.py   versionierte Ablage <Datenordner>/parameters (nie überschreiben)
+gui/pages/parameters_page.py, gui/dialogs/parameter_write_dialog.py
+```
+
+Die Sitzungsfreischaltung liegt nur im Speicher von `MainWindow` (`param_unlocked`) und wird nie gespeichert. Nach einem Schreibvorgang wird die Sicherung verworfen; das nächste Auslesen wird automatisch mit den geschriebenen Daten verglichen.
+
 ## Abweichungen von der Vorgabestruktur
 
 | Vorgabe | Umsetzung | Grund |
