@@ -2,6 +2,11 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.4.1] – 2026-11-18
+
+### Behoben
+- Darstellung bei dunklem Windows-Farbschema: Beschriftungen und Knöpfe waren unsichtbar (helle Schrift auf hellem Grund), Listen und Textfelder schwarz. DeckelLink verwendet jetzt unabhängig vom System-Farbschema ein festes helles Design (Qt-Stil „Fusion" mit eigener Farbpalette).
+
 ## [0.4.0] – 2026-11-18
 
 Erster veröffentlichter Stand (Vorabversion). **Nur gegen den Simulator getestet – keine reale DIALOG 11 geprüft.**

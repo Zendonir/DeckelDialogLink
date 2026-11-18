@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication
+
 
 class StatusKind(StrEnum):
     READY = "ready"  # green
@@ -61,3 +65,62 @@ QLabel#ErrorTitle { color: #8b0000; font-weight: bold; font-size: 11pt; }
 QPlainTextEdit, QTextEdit { font-family: Consolas, "DejaVu Sans Mono", monospace; }
 QProgressBar { min-height: 22px; text-align: center; }
 """
+
+
+# --------------------------------------------------------------------------
+# Fixed light theme
+#
+# The stylesheet above uses light backgrounds. If the OS runs in dark mode
+# (Windows 10/11 "dark"), Qt would otherwise take light text colours and dark
+# input fields from the system, producing invisible labels and black lists.
+# DeckelLink therefore always uses its own light palette with the Fusion style.
+
+_LIGHT_COLORS: dict[str, str] = {
+    "Window": "#eceff1",
+    "WindowText": "#1b1f23",
+    "Base": "#ffffff",
+    "AlternateBase": "#f5f7f8",
+    "Text": "#1b1f23",
+    "Button": "#e3e7ea",
+    "ButtonText": "#1b1f23",
+    "BrightText": "#ffffff",
+    "ToolTipBase": "#fffde7",
+    "ToolTipText": "#1b1f23",
+    "Highlight": "#1f5fa8",
+    "HighlightedText": "#ffffff",
+    "Link": "#1f5fa8",
+    "PlaceholderText": "#6b7378",
+    "Light": "#ffffff",
+    "Midlight": "#f0f2f4",
+    "Mid": "#b0bec5",
+    "Dark": "#78909c",
+    "Shadow": "#455a64",
+}
+_DISABLED_TEXT = "#9aa3a8"
+
+
+def light_palette() -> QPalette:
+    palette = QPalette()
+    for role_name, color in _LIGHT_COLORS.items():
+        palette.setColor(getattr(QPalette.ColorRole, role_name), QColor(color))
+    for role in (
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+        QPalette.ColorRole.PlaceholderText,
+    ):
+        palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(_DISABLED_TEXT))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Button, QColor("#eceff1"))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Base, QColor("#f5f7f8"))
+    return palette
+
+
+def apply_theme(app: QApplication) -> None:
+    """Apply the fixed light theme, independent of the OS colour scheme."""
+    hints = app.styleHints()
+    set_scheme = getattr(hints, "setColorScheme", None)  # Qt >= 6.8
+    if callable(set_scheme):
+        set_scheme(Qt.ColorScheme.Light)
+    app.setStyle("Fusion")
+    app.setPalette(light_palette())
+    app.setStyleSheet(APP_STYLESHEET)

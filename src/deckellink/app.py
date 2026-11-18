@@ -66,14 +66,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     from PySide6.QtWidgets import QApplication
 
     from deckellink.gui.main_window import MainWindow
-    from deckellink.gui.style import APP_STYLESHEET
+    from deckellink.gui.style import apply_theme
 
     app = QApplication.instance() or QApplication(sys.argv)
     assert isinstance(app, QApplication)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName(APP_NAME)
-    app.setStyleSheet(APP_STYLESHEET)
+    apply_theme(app)
     icon_path = Path(__file__).resolve().parent / "resources" / "icons" / "deckellink.png"
     if icon_path.is_file():
         app.setWindowIcon(QIcon(str(icon_path)))
