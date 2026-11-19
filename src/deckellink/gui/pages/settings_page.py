@@ -27,7 +27,7 @@ from deckellink.config import LOG_LEVELS, AppConfig
 from deckellink.domain.models import Profile, VerificationStatus
 from deckellink.gui.widgets.error_panel import ErrorPanel
 from deckellink.gui.widgets.profile_editor import ProfileEditor
-from deckellink.simulation.scenarios import SCENARIOS, get_scenario
+from deckellink.simulation.scenarios import REPLAY_SCENARIO_ID, SCENARIOS, get_scenario
 from deckellink.transport.network_transport import ConnectionKind
 from deckellink.transport.serial_transport import PortInfo
 
@@ -43,6 +43,9 @@ class SettingsPage(QWidget):
     profile_duplicate_requested = Signal(str)
     profile_delete_requested = Signal(str)
     profiles_reload_requested = Signal()
+    profile_export_requested = Signal(str)
+    profile_import_requested = Signal()
+    replay_file_requested = Signal()
     general_changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -112,6 +115,15 @@ class SettingsPage(QWidget):
             self.scenario_combo.addItem(scenario.title, scenario.id)
         self.scenario_combo.currentIndexChanged.connect(self._scenario_changed)
         conn_form.addRow("Simulator-Szenario:", self.scenario_combo)
+        replay_row = QHBoxLayout()
+        self.replay_label = QLabel("–")
+        self.replay_label.setWordWrap(True)
+        replay_row.addWidget(self.replay_label, 1)
+        self.replay_button = QPushButton("Aufzeichnung wählen …")
+        self.replay_button.clicked.connect(self.replay_file_requested.emit)
+        replay_row.addWidget(self.replay_button)
+        self.replay_row_label = QLabel("Aufzeichnung:")
+        conn_form.addRow(self.replay_row_label, replay_row)
         self.scenario_description = QLabel()
         self.scenario_description.setWordWrap(True)
         conn_form.addRow("", self.scenario_description)
@@ -136,9 +148,24 @@ class SettingsPage(QWidget):
         self.delete_button = QPushButton("Löschen")
         self.delete_button.setToolTip("Nur benutzerdefinierte Profile; eine Sicherung wird angelegt.")
         self.delete_button.clicked.connect(lambda: self.profile_delete_requested.emit(self.current_profile_id()))
+        self.export_button = QPushButton("Exportieren …")
+        self.export_button.setToolTip("Profil als JSON-Datei speichern, z. B. um ein geprüftes Profil weiterzugeben.")
+        self.export_button.clicked.connect(lambda: self.profile_export_requested.emit(self.current_profile_id()))
+        self.import_button = QPushButton("Importieren …")
+        self.import_button.setToolTip(
+            "Profil aus JSON-Datei übernehmen (wird geprüft, als Benutzerprofil gespeichert)."
+        )
+        self.import_button.clicked.connect(self.profile_import_requested.emit)
         self.reload_button = QPushButton("Neu laden")
         self.reload_button.clicked.connect(self.profiles_reload_requested.emit)
-        for button in (self.save_button, self.duplicate_button, self.delete_button, self.reload_button):
+        for button in (
+            self.save_button,
+            self.duplicate_button,
+            self.delete_button,
+            self.export_button,
+            self.import_button,
+            self.reload_button,
+        ):
             row.addWidget(button)
         prof_layout.addLayout(row)
         self.profile_status = QLabel()
@@ -203,6 +230,7 @@ class SettingsPage(QWidget):
         index = self.scenario_combo.findData(config.simulation_scenario)
         self.scenario_combo.setCurrentIndex(max(index, 0))
         self.scenario_description.setText(get_scenario(config.simulation_scenario).description)
+        self.set_replay_file(config.simulation_replay_file)
         self.safety_notice.setChecked(config.show_safety_notice)
         self.raw_logging.setChecked(config.raw_traffic_logging)
         self.mask_paths.setChecked(config.mask_paths_in_export)
@@ -257,6 +285,10 @@ class SettingsPage(QWidget):
     # --- slots ----------------------------------------------------------------------
     def _update_mode_widgets(self) -> None:
         sim = self.sim_radio.isChecked()
+        replay = str(self.scenario_combo.currentData()) == REPLAY_SCENARIO_ID
+        for widget in (self.replay_label, self.replay_button, self.replay_row_label):
+            widget.setVisible(replay)
+        self.replay_button.setEnabled(sim)
         kind = ConnectionKind(str(self.kind_combo.currentData() or "serial"))
         self.scenario_combo.setEnabled(sim)
         self.kind_combo.setEnabled(not sim)
@@ -302,9 +334,13 @@ class SettingsPage(QWidget):
         )
         self.port_selected.emit(device)
 
+    def set_replay_file(self, path: str) -> None:
+        self.replay_label.setText(path or "keine gewählt - es wird das Beispielprogramm verwendet")
+
     def _scenario_changed(self, _index: int) -> None:
         scenario_id = str(self.scenario_combo.currentData())
         self.scenario_description.setText(get_scenario(scenario_id).description)
+        self._update_mode_widgets()
         if not self._loading:
             self.scenario_selected.emit(scenario_id)
 

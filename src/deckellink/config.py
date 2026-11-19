@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,9 @@ log = logging.getLogger(__name__)
 
 CONFIG_FILE = "settings.json"
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+MAX_RECENT_FILES = 10
+FONT_SCALE_MIN = 80
+FONT_SCALE_MAX = 200
 
 
 @dataclass
@@ -35,9 +38,17 @@ class AppConfig:
     mask_paths_in_export: bool = True
     backup_retention_days: int | None = None
     last_open_dir: str = ""
+    recent_files: list[str] = field(default_factory=list)
+    font_scale_percent: int = 100
+    simulation_replay_file: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def add_recent_file(self, path: str) -> None:
+        """Most recently used first, without duplicates, bounded."""
+        self.recent_files = [path] + [p for p in self.recent_files if p != path]
+        del self.recent_files[MAX_RECENT_FILES:]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> tuple[AppConfig, list[str]]:
@@ -52,6 +63,12 @@ class AppConfig:
             if f.name == "backup_retention_days":
                 if value is None or (isinstance(value, int) and not isinstance(value, bool) and value > 0):
                     config.backup_retention_days = value
+                else:
+                    warnings.append(f"Ungültiger Wert für {f.name}: {value!r}")
+                continue
+            if isinstance(default, list):
+                if isinstance(value, list) and all(isinstance(item, str) for item in value):
+                    setattr(config, f.name, value[:MAX_RECENT_FILES])
                 else:
                     warnings.append(f"Ungültiger Wert für {f.name}: {value!r}")
                 continue
@@ -75,6 +92,7 @@ class AppConfig:
             warnings.append(f"Unbekanntes Log-Level {config.log_level!r}")
             config.log_level = "INFO"
         config.terminal_history_lines = min(max(config.terminal_history_lines, 100), 100_000)
+        config.font_scale_percent = min(max(config.font_scale_percent, FONT_SCALE_MIN), FONT_SCALE_MAX)
         return config, warnings
 
 

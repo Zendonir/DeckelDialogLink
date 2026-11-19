@@ -25,6 +25,7 @@ class DiagnosticsPage(QWidget):
     control_line_requested = Signal(str, bool)
     loopback_requested = Signal()
     export_requested = Signal()
+    format_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -38,9 +39,12 @@ class DiagnosticsPage(QWidget):
         self.monitor_button.toggled.connect(self.monitor_toggled.emit)
         self.loopback_button = QPushButton("&Loopback-Test …")
         self.loopback_button.clicked.connect(self.loopback_requested.emit)
+        self.format_button = QPushButton("Daten&format ermitteln …")
+        self.format_button.setToolTip("Parität/Datenbits aus Daten der CNC schätzen - nur Mitlesen, kein Senden.")
+        self.format_button.clicked.connect(self.format_requested.emit)
         self.export_button = QPushButton("Diagnosepaket &exportieren …")
         self.export_button.clicked.connect(self.export_requested.emit)
-        for button in (self.monitor_button, self.loopback_button, self.export_button):
+        for button in (self.monitor_button, self.loopback_button, self.format_button, self.export_button):
             actions.addWidget(button)
         actions.addStretch(1)
         root.addLayout(actions)

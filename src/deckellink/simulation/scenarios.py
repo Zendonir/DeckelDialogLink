@@ -292,6 +292,19 @@ SCENARIOS: tuple[Scenario, ...] = (
     ),
 )
 
+REPLAY_SCENARIO_ID = "replay"
+SCENARIOS = (
+    *SCENARIOS,
+    Scenario(
+        REPLAY_SCENARIO_ID,
+        "Aufzeichnung abspielen (echte Rohdaten)",
+        "Die simulierte CNC sendet beim Empfang (und beim Mitlesen des Datenformats) die Bytes einer "
+        "gewählten Aufzeichnung, z. B. einer Rohdaten-Datei aus dem Ordner 'raw' nach dem ersten echten "
+        "Empfang. Bei LSV2-Profilen wird der Inhalt als Telegramme neu erzeugt.",
+        ScenarioKind.RECEIVE,
+        SimulationConfig(),
+    ),
+)
 SCENARIOS_BY_ID = {s.id: s for s in SCENARIOS}
 DEFAULT_SCENARIO_ID = "send_ok"
 

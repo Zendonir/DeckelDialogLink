@@ -34,6 +34,12 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Headless-Selbsttest im Simulator ausführen und beenden (Exit-Code 0 = OK)",
     )
     parser.add_argument("--smoke-report", type=Path, help="JSON-Bericht des Selbsttests schreiben")
+    parser.add_argument(
+        "file",
+        nargs="?",
+        type=Path,
+        help="NC-Datei, die beim Start geladen und geprüft wird (es wird nichts automatisch gesendet)",
+    )
     return parser.parse_args(list(argv) if argv is not None else None)
 
 
@@ -63,8 +69,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         config.simulation_mode = True
 
     from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
+    from deckellink.gui.app_support import acquire_instance_lock, install_exception_hooks
     from deckellink.gui.main_window import MainWindow
     from deckellink.gui.style import apply_theme
 
@@ -73,18 +80,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName(APP_NAME)
-    apply_theme(app)
+    apply_theme(app, config.font_scale_percent / 100.0)
     icon_path = Path(__file__).resolve().parent / "resources" / "icons" / "deckellink.png"
     if icon_path.is_file():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    def excepthook(exc_type: type[BaseException], exc: BaseException, tb: object) -> None:
-        log.critical("Unhandled exception", exc_info=(exc_type, exc, tb))  # type: ignore[arg-type]
+    lock = acquire_instance_lock(paths)
+    if lock is None:
+        log.warning("Another DeckelLink instance is running with data folder %s", paths.root)
+        QMessageBox.warning(
+            None,
+            APP_NAME,
+            "DeckelLink läuft bereits.\n\nEs darf nur eine Instanz gleichzeitig laufen, damit sich nicht zwei "
+            "Programme denselben Anschluss teilen. Bitte das bereits geöffnete Fenster verwenden.",
+        )
+        log_shutdown()
+        return 3
 
-    sys.excepthook = excepthook
+    install_exception_hooks()
     window = MainWindow(paths, config)
     window.show()
+    if args.file is not None:
+        window.open_initial_file(args.file)
     code = int(app.exec())
+    lock.unlock()
     log_shutdown()
     return code
 

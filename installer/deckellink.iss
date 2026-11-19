@@ -54,6 +54,14 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "assocnc"; Description: "NC-Dateien (.nc) im Kontextmenue 'Oeffnen mit' anbieten"; GroupDescription: "Dateizuordnung:"; Flags: unchecked
+
+[Registry]
+; Only offered under "Open with" - existing default programs for .nc are not replaced.
+Root: HKA; Subkey: "Software\Classes\.nc\OpenWithProgids"; ValueType: string; ValueName: "DeckelLink.NCFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: assocnc
+Root: HKA; Subkey: "Software\Classes\DeckelLink.NCFile"; ValueType: string; ValueName: ""; ValueData: "NC-Programm (DeckelLink)"; Flags: uninsdeletekey; Tasks: assocnc
+Root: HKA; Subkey: "Software\Classes\DeckelLink.NCFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"; Tasks: assocnc
+Root: HKA; Subkey: "Software\Classes\DeckelLink.NCFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""; Tasks: assocnc
 
 [InstallDelete]
 ; Remove libraries of a previous version before installing the new onedir build.
@@ -64,6 +72,7 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; Comment: "NC-Programme uebertragen"
+Name: "{autoprograms}\{#AppName} Handbuch"; Filename: "{app}\README.md"; Comment: "Bedienungsanleitung"
 Name: "{autoprograms}\{#AppName} (Simulationsmodus)"; Filename: "{app}\{#AppExe}"; Parameters: "--simulate"; Comment: "DeckelLink im Simulationsmodus starten"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 

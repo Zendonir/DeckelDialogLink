@@ -4,7 +4,7 @@
 
 1. Von der GitHub-Release-Seite `DeckelLink-<version>-Setup-x64.exe` herunterladen und optional mit `SHA256SUMS.txt` prüfen (`Get-FileHash DeckelLink-<version>-Setup-x64.exe`).
 2. Setup starten. Es sind **keine Administratorrechte** nötig; installiert wird nach `%LOCALAPPDATA%\Programs\DeckelLink` (bei Ausführung als Administrator wahlweise für alle Benutzer).
-3. Startmenü: „DeckelLink" und „DeckelLink (Simulationsmodus)".
+3. Startmenü: „DeckelLink", „DeckelLink (Simulationsmodus)" und „DeckelLink Handbuch". Optional bietet der Installer `.nc`-Dateien im Kontextmenü „Öffnen mit" an (ersetzt kein vorhandenes Standardprogramm).
 4. Aktualisieren: neuen Installer einfach darüber installieren. Deinstallieren: Windows-Einstellungen → Apps. Ihre Daten unter `%LOCALAPPDATA%\DeckelLink` bleiben in beiden Fällen erhalten.
 
 Hinweis: Der Installer ist nicht code-signiert. Windows SmartScreen kann deshalb warnen („Weitere Informationen → Trotzdem ausführen"). Prüfen Sie im Zweifel die SHA-256-Prüfsumme.
@@ -55,10 +55,10 @@ Ein Onefile-Build entpackt bei jedem Start ca. 100–200 MB PySide6-Bibliotheken
 Installer selbst bauen (Inno Setup 6 installiert):
 
 ```bash
-iscc /DAppVersion=0.4.1 installer\deckellink.iss
+iscc /DAppVersion=0.5.0 installer\deckellink.iss
 ```
 
-Ergebnis: `dist\installer\DeckelLink-0.4.1-Setup-x64.exe`.
+Ergebnis: `dist\installer\DeckelLink-0.5.0-Setup-x64.exe`.
 
 ### Release erstellen
 Version in `src/deckellink/version.py` und `CHANGELOG.md` pflegen, dann Tag `v<version>` pushen. Der Workflow `build-windows.yml` baut, testet (auch eine stille Installation mit Selbsttest und Deinstallation) und veröffentlicht das GitHub-Release mit Installer, ZIP und Prüfsummen. Versionen `0.x` werden als Vorabversion markiert.

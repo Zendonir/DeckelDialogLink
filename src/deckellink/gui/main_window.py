@@ -11,26 +11,45 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QKeySequence, QShortcut
+from PySide6.QtGui import (
+    QCloseEvent,
+    QDesktopServices,
+    QDragEnterEvent,
+    QDropEvent,
+    QKeySequence,
+    QShortcut,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QListWidget,
     QMainWindow,
     QMessageBox,
+    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from deckellink.clock import Clock, ScaledClock, SystemClock
-from deckellink.config import AppConfig, save_config
+from deckellink.commissioning import CommissioningRecord, CommissioningStore, StepStatus, export_report
+from deckellink.config import FONT_SCALE_MAX, FONT_SCALE_MIN, AppConfig, save_config
 from deckellink.diagnostics.error_messages import describe_error
 from deckellink.diagnostics.export import export_diagnostics
-from deckellink.diagnostics.loopback_test import LoopbackPattern, make_pattern, run_loopback_test
+from deckellink.diagnostics.format_detect import (
+    FormatGuess,
+    analyze_capture,
+    capture_passively,
+    capture_settings,
+    encode_frames_as_8n1,
+)
+from deckellink.diagnostics.loopback_test import LoopbackPattern, LoopbackVerdict, make_pattern, run_loopback_test
 from deckellink.diagnostics.terminal import TerminalBuffer, TrafficFileLogger
 from deckellink.domain.errors import ProfileValidationError, UserFacingError
-from deckellink.domain.models import Profile, VerificationStatus
+from deckellink.domain.models import Parity, Profile, VerificationStatus
 from deckellink.domain.results import (
     ReceivedProgram,
     ReceiveProgress,
@@ -40,8 +59,11 @@ from deckellink.domain.results import (
     TransferProgress,
 )
 from deckellink.domain.states import ReceiveState, SendState
+from deckellink.gui.dialogs.commissioning_dialog import CommissioningDialog
 from deckellink.gui.dialogs.confirm_transfer import ConfirmInfo, ConfirmOutcome, ask_confirmation
 from deckellink.gui.dialogs.export_dialog import ExportDialog
+from deckellink.gui.dialogs.format_detect_dialog import FormatDetectDialog
+from deckellink.gui.dialogs.help_dialog import HelpDialog, show_about
 from deckellink.gui.dialogs.loopback_dialog import LoopbackDialog
 from deckellink.gui.dialogs.parameter_write_dialog import ParameterWriteInfo, ask_parameter_write
 from deckellink.gui.pages.diagnostics_page import DiagnosticsPage
@@ -52,7 +74,7 @@ from deckellink.gui.pages.receive_page import ReceivePage
 from deckellink.gui.pages.settings_page import SettingsPage
 from deckellink.gui.pages.terminal_page import TerminalPage
 from deckellink.gui.pages.transfer_page import TransferPage
-from deckellink.gui.style import StatusKind
+from deckellink.gui.style import StatusKind, apply_theme
 from deckellink.gui.viewmodels import (
     LoadedProgram,
     evaluate_receive_gate,
@@ -81,7 +103,14 @@ from deckellink.profiles.repository import ProfileRepository, ProfileRepositoryE
 from deckellink.profiles.schema import parse_profile
 from deckellink.safety import PARAMETER_WRITE_NOTICE
 from deckellink.simulation.lsv2_cnc import Lsv2SimulatedCnc
-from deckellink.simulation.scenarios import SAMPLE_PARAMETERS, SAMPLE_PROGRAM, Scenario, get_scenario, lsv2_config_for
+from deckellink.simulation.scenarios import (
+    REPLAY_SCENARIO_ID,
+    SAMPLE_PARAMETERS,
+    SAMPLE_PROGRAM,
+    Scenario,
+    get_scenario,
+    lsv2_config_for,
+)
 from deckellink.storage.archive import ReceiveArchive, StoredReceive, export_copy
 from deckellink.storage.backup import BackupManager
 from deckellink.storage.files import sanitize_stem, unique_path, write_new_file
@@ -94,7 +123,7 @@ from deckellink.transport.base import ModemStatus, Transport
 from deckellink.transport.loopback import LoopbackTransport
 from deckellink.transport.network_transport import ConnectionKind, connection_target, create_hardware_transport
 from deckellink.transport.serial_transport import available_ports
-from deckellink.transport.simulated_transport import SIMULATED_PORT_NAME, SimulatedTransport
+from deckellink.transport.simulated_transport import SIMULATED_PORT_NAME, SimulatedTransport, SimulationConfig
 from deckellink.version import APP_NAME, __version__
 
 log = logging.getLogger(__name__)
@@ -119,6 +148,8 @@ TASK_LOOPBACK = "Loopback-Test"
 TASK_MONITOR = "Diagnose"
 TASK_PARAM_READ = "Parameter auslesen"
 TASK_PARAM_WRITE = "Parameter schreiben"
+TASK_FORMAT = "Datenformat ermitteln"
+PROFILE_FILE_FILTER = "DeckelLink-Profile (*.json);;Alle Dateien (*)"
 PARAMETER_FILE_FILTER = "Parameterdateien (*.par *.txt *.TXT *.prm);;Alle Dateien (*)"
 
 
@@ -155,6 +186,10 @@ class MainWindow(QMainWindow):
         self.confirm: ConfirmFn = ask_confirmation
         self.confirm_parameter_write: Callable[[ParameterWriteInfo, QWidget | None], bool] = ask_parameter_write
         self.param_archive = ParameterArchive(paths.root)
+        self.commissioning_store = CommissioningStore(paths.root)
+        self.commissioning_dialog: CommissioningDialog | None = None
+        self.commissioning_record: CommissioningRecord | None = None
+        self.format_dialog: FormatDetectDialog | None = None
         self.param_unlocked = False  # session only, never persisted
         self.param_backup: ParameterBackupInfo | None = None
         self.param_candidate: ParameterCandidate | None = None
@@ -162,8 +197,11 @@ class MainWindow(QMainWindow):
         self.loopback_dialog: LoopbackDialog | None = None
 
         self.setWindowTitle(f"{APP_NAME} {__version__} - DECKEL FP2A / DIALOG 11")
+        self.setMinimumSize(800, 560)
         self.resize(1280, 860)
         self._build_ui()
+        self._build_menus()
+        self.setAcceptDrops(True)
 
         self.log_handler = QtLogHandler()
         self.log_handler.emitter.record.connect(self.log_page.add_record)
@@ -238,7 +276,7 @@ class MainWindow(QMainWindow):
             self.settings_page,
             self.log_page,
         ):
-            self.stack.addWidget(page)
+            self.stack.addWidget(self._scrollable(page))
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
         self.nav.setCurrentRow(0)
 
@@ -293,14 +331,154 @@ class MainWindow(QMainWindow):
         sp.profile_duplicate_requested.connect(self.duplicate_profile)
         sp.profile_delete_requested.connect(self.delete_profile)
         sp.profiles_reload_requested.connect(self.reload_profiles)
+        sp.profile_export_requested.connect(self.export_profile)
+        sp.profile_import_requested.connect(self.import_profile)
+        sp.replay_file_requested.connect(self.choose_replay_file)
+        self.diagnostics_page.format_requested.connect(self.open_format_detection)
         sp.general_changed.connect(self._general_settings_changed)
 
         self.log_page.open_folder_requested.connect(lambda: self._open_folder(self.paths.logs))
 
-        QShortcut(QKeySequence("Ctrl+O"), self, self.open_file)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.cancel_task)
         for index in range(len(NAV_ITEMS)):
             QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self, lambda i=index: self.nav.setCurrentRow(i))
+
+    def _build_menus(self) -> None:
+        bar = self.menuBar()
+        file_menu = bar.addMenu("&Datei")
+        open_action = file_menu.addAction("NC-Programm &öffnen …")
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_action.triggered.connect(self.open_file)
+        self.recent_menu = file_menu.addMenu("&Zuletzt geöffnet")
+        file_menu.addSeparator()
+        quit_action = file_menu.addAction("&Beenden")
+        quit_action.setShortcut(QKeySequence("Ctrl+Q"))
+        quit_action.triggered.connect(self.close)
+
+        view_menu = bar.addMenu("&Ansicht")
+        for text, shortcut, delta in (
+            ("Schrift &größer", "Ctrl++", 10),
+            ("Schrift &kleiner", "Ctrl+-", -10),
+            ("Schrift &Standard", "Ctrl+0", 0),
+        ):
+            action = view_menu.addAction(text)
+            action.setShortcut(QKeySequence(shortcut))
+            action.triggered.connect(lambda _c=False, d=delta: self.change_font_scale(d))
+        self.tools_menu = bar.addMenu("&Werkzeuge")
+        loopback_action = self.tools_menu.addAction("&Loopback-Test …")
+        loopback_action.triggered.connect(self.open_loopback)
+        export_action = self.tools_menu.addAction("Diagnosepaket &exportieren …")
+        export_action.triggered.connect(self.export_diagnostics_package)
+        self.tools_menu.addSeparator()
+        wizard_action = self.tools_menu.addAction("&Inbetriebnahme-Assistent …")
+        wizard_action.triggered.connect(self.open_commissioning)
+        format_action = self.tools_menu.addAction("&Datenformat ermitteln (nur Mitlesen) …")
+        format_action.triggered.connect(self.open_format_detection)
+
+        help_menu = bar.addMenu("&Hilfe")
+        manual = help_menu.addAction("&Handbuch …")
+        manual.setShortcut(QKeySequence(Qt.Key.Key_F1))
+        manual.triggered.connect(lambda _checked=False: self.open_help("README.md"))
+        safety = help_menu.addAction("&Sicherheitskonzept …")
+        safety.triggered.connect(lambda: self.open_help("SAFETY.md"))
+        commissioning = help_menu.addAction("&Inbetriebnahme …")
+        commissioning.triggered.connect(lambda: self.open_help("COMMISSIONING.md"))
+        help_menu.addSeparator()
+        about = help_menu.addAction("Ü&ber DeckelLink …")
+        about.triggered.connect(lambda: show_about(self))
+        self._refresh_recent_menu()
+
+    # ----------------------------------------------------------- menus / comfort
+    def open_help(self, start: str = "README.md") -> HelpDialog:
+        dialog = HelpDialog(self, start)
+        dialog.setModal(False)
+        dialog.show()
+        self._help_dialog = dialog
+        return dialog
+
+    def _refresh_recent_menu(self) -> None:
+        menu = self.recent_menu
+        menu.clear()
+        existing = [p for p in self.config.recent_files if Path(p).is_file()]
+        if not existing:
+            placeholder = menu.addAction("(keine)")
+            placeholder.setEnabled(False)
+            return
+        for index, name in enumerate(existing, start=1):
+            action = menu.addAction(f"&{index % 10}  {name}")
+            action.triggered.connect(lambda _c=False, n=name: self.load_for_send(Path(n)))
+        menu.addSeparator()
+        clear = menu.addAction("Liste leeren")
+        clear.triggered.connect(self.clear_recent_files)
+
+    def clear_recent_files(self) -> None:
+        self.config.recent_files = []
+        self._save_config()
+        self._refresh_recent_menu()
+
+    def change_font_scale(self, delta: int) -> None:
+        current = self.config.font_scale_percent
+        value = 100 if delta == 0 else min(max(current + delta, FONT_SCALE_MIN), FONT_SCALE_MAX)
+        self.config.font_scale_percent = value
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            apply_theme(app, value / 100.0)
+        self._save_config()
+        self.statusBar().showMessage(f"Schriftgröße {value} %", 4000)
+
+    def open_initial_file(self, path: Path) -> None:
+        """File passed on the command line / via file association: load and check only."""
+        if path.is_file():
+            self.load_for_send(path)
+        else:
+            self.statusBar().showMessage(f"Datei nicht gefunden: {path}", 10000)
+
+    @staticmethod
+    def _dropped_files(event: QDragEnterEvent | QDropEvent) -> list[Path]:
+        mime = event.mimeData()
+        if not mime.hasUrls():
+            return []
+        return [Path(url.toLocalFile()) for url in mime.urls() if url.isLocalFile()]
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if self._dropped_files(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        files = [p for p in self._dropped_files(event) if p.is_file()]
+        if not files:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        if self.busy:
+            self.statusBar().showMessage("Datei nicht geladen: ein Vorgang läuft", 6000)
+            return
+        self.load_for_send(files[0])
+        if len(files) > 1:
+            self.statusBar().showMessage("Nur die erste der abgelegten Dateien wurde geladen", 6000)
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        if not getattr(self, "_fitted", False):
+            self._fitted = True
+            screen = self.screen()
+            if screen is not None:
+                available = screen.availableGeometry()
+                width = min(self.width(), available.width() - 20)
+                height = min(self.height(), available.height() - 40)
+                if width < self.width() or height < self.height():
+                    self.resize(max(width, self.minimumWidth()), max(height, self.minimumHeight()))
+
+    @staticmethod
+    def _scrollable(page: QWidget) -> QScrollArea:
+        """Pages scroll instead of forcing a wide window (small workshop screens)."""
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setWidget(page)
+        return area
 
     # ------------------------------------------------------------- helpers
     @property
@@ -341,21 +519,46 @@ class MainWindow(QMainWindow):
         if self.simulation:
             if purpose == "loopback":
                 return LoopbackTransport(serial, self._clock())
+            replay = self._replay_data() if self.scenario().id == REPLAY_SCENARIO_ID else None
+            if purpose == "format":
+                stream = replay if replay is not None else encode_frames_as_8n1(SAMPLE_PROGRAM * 4, Parity.EVEN)
+                return SimulatedTransport(
+                    capture_settings(serial), SimulationConfig(machine_program=stream), self._clock()
+                )
             receiving = purpose in ("receive", "param_read")
             if self.profile.protocol.is_lsv2 and purpose != "monitor":
                 lsv2_config = lsv2_config_for(self.scenario(), receive=receiving, drip_feed=purpose == "dripfeed")
                 if purpose == "param_read":
                     lsv2_config = replace(lsv2_config, program=SAMPLE_PARAMETERS)
+                if replay is not None and receiving:
+                    lsv2_config = replace(lsv2_config, program=replay)
                 return Lsv2SimulatedCnc(serial, self.profile.protocol, lsv2_config, self._clock())
             config = self.scenario().config
             if purpose == "param_read":
                 config = replace(config, machine_program=SAMPLE_PARAMETERS)
+            if replay is not None and receiving:
+                config = replace(config, machine_program=replay)
             if purpose == "receive" and not config.machine_program:
                 config = replace(config, machine_program=SAMPLE_PROGRAM)
             return SimulatedTransport(serial, config, self._clock())
+        if purpose == "format":
+            serial = capture_settings(serial)
         return create_hardware_transport(
             self.connection_kind, self.config.port, self.config.network_host, self.config.network_port, serial
         )
+
+    def _replay_data(self) -> bytes | None:
+        """Raw data of a recorded transfer for the replay scenario (None -> sample program)."""
+        name = self.config.simulation_replay_file
+        if not name:
+            return None
+        try:
+            data = Path(name).read_bytes()
+        except OSError as exc:
+            log.warning("Replay file unreadable: %s", exc)
+            self.statusBar().showMessage("Aufzeichnung nicht lesbar - Beispielprogramm wird verwendet", 8000)
+            return None
+        return data or None
 
     def _link_summary(self) -> str:
         summary = self.profile.serial.summary
@@ -564,6 +767,8 @@ class MainWindow(QMainWindow):
             self._refresh_all()
             return
         self.config.last_open_dir = str(path.parent)
+        self.config.add_recent_file(str(path))
+        self._refresh_recent_menu()
         self._save_config()
         analysis = analyze(original, self.profile.transfer, self.profile.serial)
         self.program = LoadedProgram(path=path, original=original, analysis=analysis)
@@ -815,6 +1020,8 @@ class MainWindow(QMainWindow):
             self.last_result["sha256_normalized"] = stored.metadata["sha256_normalized"]
         self.last_stored = stored
         self._last_failed = result.state is ReceiveState.FAILED or store_error is not None
+        if result.state is ReceiveState.COMPLETED and program is not None and program.complete:
+            self._commissioning_auto("receive", "Empfang erfolgreich")
         if result.error is not None:
             self.diagnostics_page.last_error.setText(result.error.title)
         self.refresh_programs()
@@ -1204,6 +1411,8 @@ class MainWindow(QMainWindow):
         def finished(result: Any) -> None:
             if self.loopback_dialog is not None:
                 self.loopback_dialog.show_result(result)
+            if result.verdict is LoopbackVerdict.PASSED:
+                self._commissioning_auto("loopback", "Loopback bestanden")
             self.last_result = {"type": "loopback", "summary": result.summary()}
 
         self._start_task(TASK_LOOPBACK, job, finished=finished)
@@ -1268,6 +1477,252 @@ class MainWindow(QMainWindow):
         self._save_config()
         log.info("Connection type %s (%s)", kind_value.value, self.port_label)
         self._refresh_all()
+
+    # ----------------------------------------------------------- format detection
+    def open_format_detection(self) -> None:
+        if self.format_dialog is None:
+            dialog = FormatDetectDialog(self.port_label, self.profile.serial.baud_rate, self)
+            dialog.start_requested.connect(self.run_format_detection)
+            dialog.cancel_requested.connect(self._stop_format_detection)
+            dialog.adopt_requested.connect(self.adopt_detected_format)
+            dialog.finished.connect(self._format_dialog_closed)
+            self.format_dialog = dialog
+        if not self.simulation and self.connection_kind is ConnectionKind.TCP:
+            self.statusBar().showMessage("TCP-Rohdaten: Für das Mitlesen den Netzwerkadapter auf 8N1 stellen.", 12000)
+        self.format_dialog.show()
+        self.format_dialog.raise_()
+
+    def _format_dialog_closed(self, _code: int) -> None:
+        self._stop_format_detection()
+        if self.format_dialog is not None:
+            self.format_dialog.deleteLater()
+        self.format_dialog = None
+
+    def _stop_format_detection(self) -> None:
+        if self.task is not None and self.task.name == TASK_FORMAT:
+            self.task.cancel()
+
+    def run_format_detection(self, duration_s: int) -> None:
+        gate = evaluate_receive_gate(simulation=self.simulation, port=self.connection_target, busy=self.busy)
+        if not gate.allowed:
+            if self.format_dialog is not None:
+                self.format_dialog.set_running(False)
+            self.statusBar().showMessage(f"Mitlesen nicht möglich: {gate.reason_text}", 8000)
+            return
+        self._close_retained()
+        transport = self._make_transport("format")
+        clock = self._clock()
+        raw_dir = self.paths.raw
+        log.info("Passive format detection started on %s (receive only)", self.port_label)
+
+        def job(cb: TaskCallbacks, token: CancellationToken) -> object:
+            data = capture_passively(
+                transport,
+                duration_s=float(duration_s),
+                max_bytes=64_000,
+                clock=clock,
+                token=token,
+                on_traffic=cb.traffic,
+                on_progress=cb.progress,
+            )
+            if data:
+                target = unique_path(raw_dir, f"FORMAT_{datetime.now():%Y%m%d_%H%M%S}", ".raw")
+                write_new_file(target, data)
+            return analyze_capture(data)
+
+        def finished(guess: Any) -> None:
+            if self.format_dialog is not None:
+                self.format_dialog.show_guess(guess)
+            log.info("Format detection result: %s (%s)", guess.frame, guess.confidence)
+            if guess.parity is not None:
+                self._commissioning_auto("format", f"Ermittelt: {guess.frame} ({guess.confidence})")
+
+        def progress(count: Any) -> None:
+            if self.format_dialog is not None:
+                self.format_dialog.set_received(int(count))
+
+        self._start_task(TASK_FORMAT, job, finished=finished, progress=progress)
+
+    def adopt_detected_format(self, guess: Any) -> None:
+        if not isinstance(guess, FormatGuess) or guess.parity is None or guess.data_bits is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Datenformat übernehmen",
+            f"Eine Kopie des Profils '{self.profile.display_name}' mit Datenformat {guess.frame} anlegen und "
+            "aktivieren? Das ermittelte Format ist ein Hinweis und muss durch einen Empfang bestätigt werden.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        serial = replace(
+            self.profile.serial, data_bits=guess.data_bits, parity=guess.parity, stop_bits=guess.stop_bits or 1
+        )
+        copy = replace(
+            self.profile,
+            id=self.repo.unique_id(f"{self.profile.id}_{guess.frame.lower()}"),
+            display_name=f"{self.profile.display_name} ({guess.frame} ermittelt)"[:120],
+            serial=serial,
+            verification_status=VerificationStatus.UNVERIFIED,
+            builtin=False,
+        )
+        try:
+            stored, _ = self.repo.save(copy)
+        except (ProfileValidationError, OSError) as exc:
+            self.settings_page.profile_error.show_error(describe_error(exc, operation="Profil anlegen"))
+            return
+        self._activate_profile(stored)
+        self.statusBar().showMessage(f"Profil '{stored.display_name}' angelegt und aktiviert", 10000)
+
+    # ----------------------------------------------------------- commissioning assistant
+    def open_commissioning(self) -> None:
+        if self.commissioning_dialog is not None:
+            self.commissioning_dialog.close()
+        record = self.commissioning_store.load(self.profile.id, datetime.now().astimezone())
+        self.commissioning_record = record
+        dialog = CommissioningDialog(record, self.profile, self)
+        dialog.changed.connect(self._save_commissioning)
+        dialog.action_requested.connect(self._commissioning_action)
+        dialog.export_requested.connect(self.export_commissioning_report)
+        dialog.mark_verified_requested.connect(self.mark_profile_verified)
+        dialog.finished.connect(self._commissioning_closed)
+        self.commissioning_dialog = dialog
+        dialog.show()
+
+    def _commissioning_closed(self, _code: int) -> None:
+        self._save_commissioning()
+        if self.commissioning_dialog is not None:
+            self.commissioning_dialog.deleteLater()
+        self.commissioning_dialog = None
+        self.commissioning_record = None
+
+    def _save_commissioning(self) -> None:
+        if self.commissioning_record is not None:
+            try:
+                self.commissioning_store.save(self.commissioning_record)
+            except OSError as exc:
+                log.error("Saving commissioning record failed: %s", exc)
+
+    def _commissioning_action(self, action: str) -> None:
+        pages = {"receive": 1, "send": 0, "parameters": 3}
+        if action == "loopback":
+            self.open_loopback()
+        elif action == "format":
+            self.open_format_detection()
+        elif action in pages:
+            self.nav.setCurrentRow(pages[action])
+            self.raise_()
+        else:
+            self.open_help("COMMISSIONING.md")
+
+    def _commissioning_auto(self, step_id: str, note: str) -> None:
+        """Real-machine results mark the matching step as done (never in simulation)."""
+        if self.simulation or self.commissioning_dialog is None or self.commissioning_record is None:
+            return
+        if self.commissioning_record.profile_id != self.profile.id:
+            return
+        self.commissioning_dialog.set_status(step_id, StepStatus.DONE)
+        record = self.commissioning_record.step(step_id)
+        if not record.note:
+            record.note = f"{note} ({datetime.now():%d.%m.%Y %H:%M})"
+            self.commissioning_dialog.note_edits[step_id].setText(record.note)
+        self._save_commissioning()
+
+    def export_commissioning_report(self) -> None:
+        if self.commissioning_record is None:
+            return
+        try:
+            target = export_report(
+                self.commissioning_record, self.profile, self.paths.exports, datetime.now().astimezone()
+            )
+        except OSError as exc:
+            QMessageBox.warning(self, "Export fehlgeschlagen", describe_error(exc, operation="Protokoll").as_text())
+            return
+        self.statusBar().showMessage(f"Protokoll gespeichert: {target}", 15000)
+        self._open_folder(target.parent)
+
+    def mark_profile_verified(self) -> None:
+        record = self.commissioning_record
+        if record is None or not record.can_mark_verified():
+            return
+        answer = QMessageBox.question(
+            self,
+            "Profil als verifiziert markieren",
+            f"Profil '{self.profile.display_name}' als an der realen Maschine verifiziert kennzeichnen?\n\n"
+            f"Prüfer: {record.tester}\nMitgelieferte Standardprofile bleiben unverändert - es entsteht eine "
+            "Kopie.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        stamp = datetime.now().astimezone().strftime("%d.%m.%Y")
+        note = f" Verifiziert am {stamp} durch {record.tester}" + (
+            f" ({record.machine_info})." if record.machine_info else "."
+        )
+        verified = replace(
+            self.profile,
+            verification_status=VerificationStatus.VERIFIED,
+            description=(self.profile.description + note).strip(),
+        )
+        try:
+            stored, _ = self.repo.save(verified)
+        except (ProfileValidationError, OSError) as exc:
+            self.settings_page.profile_error.show_error(describe_error(exc, operation="Profil speichern"))
+            return
+        record.profile_id = stored.id
+        self.commissioning_store.save(record)
+        log.warning("Profile %s marked as VERIFIED by %s", stored.id, record.tester)
+        self._activate_profile(stored)
+        if self.commissioning_dialog is not None:
+            self.commissioning_dialog.close()
+        self.statusBar().showMessage(f"Profil '{stored.display_name}' ist als verifiziert gekennzeichnet", 15000)
+
+    # ----------------------------------------------------------- profile exchange / replay
+    def export_profile(self, profile_id: str) -> None:
+        profile = self.repo.get(profile_id)
+        if profile is None:
+            return
+        start = str(Path(self.config.last_open_dir or Path.home()) / f"{profile.id}.json")
+        name, _ = QFileDialog.getSaveFileName(self, "Profil exportieren", start, PROFILE_FILE_FILTER)
+        if not name:
+            return
+        try:
+            backup = self.repo.export_profile(profile_id, Path(name), overwrite=True)
+        except (ProfileRepositoryError, OSError) as exc:
+            self.settings_page.profile_error.show_error(describe_error(exc, operation="Profil exportieren"))
+            return
+        message = f"Profil exportiert: {Path(name).name}"
+        if backup is not None:
+            message += f" (vorherige Datei gesichert als {backup.name})"
+        self.statusBar().showMessage(message, 10000)
+
+    def import_profile(self) -> None:
+        name, _ = QFileDialog.getOpenFileName(
+            self, "Profil importieren", self.config.last_open_dir or str(Path.home()), PROFILE_FILE_FILTER
+        )
+        if not name:
+            return
+        try:
+            stored, warnings = self.repo.import_profile(Path(name))
+        except (ProfileValidationError, ProfileRepositoryError, OSError) as exc:
+            self.settings_page.profile_error.show_error(describe_error(exc, operation="Profil importieren"))
+            return
+        self.settings_page.profile_error.clear()
+        self._activate_profile(stored)
+        notes = [w for w in warnings if "importiert als" in w or "verifiziert" in w]
+        self.statusBar().showMessage(f"Profil importiert: {stored.display_name}. " + " ".join(notes), 15000)
+
+    def choose_replay_file(self) -> None:
+        name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Aufzeichnung für den Simulator wählen",
+            str(self.paths.raw),
+            "Rohdaten/NC-Dateien (*.raw *.nc *.par *.txt);;Alle Dateien (*)",
+        )
+        if not name:
+            return
+        self.config.simulation_replay_file = name
+        self._save_config()
+        self.settings_page.set_replay_file(name)
+        log.info("Replay file selected: %s", Path(name).name)
 
     def set_scenario(self, scenario_id: str) -> None:
         self.config.simulation_scenario = scenario_id

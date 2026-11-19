@@ -2,6 +2,29 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.5.0] – 2026-11-19
+
+**Nur gegen den Simulator getestet.**
+
+### Hinzugefügt
+- **Datenformat ermitteln (nur Mitlesen):** Parität/Datenbits werden aus Daten der CNC geschätzt (Port als 8N1, es wird nichts gesendet); Ergebnis als Profilkopie übernehmbar. Mitschnitte werden in `raw/` abgelegt.
+- **Aufzeichnung abspielen:** Simulator-Szenario, das echte Rohdaten (z. B. nach dem ersten Empfang) wiedergibt.
+- **Inbetriebnahme-Assistent:** Schritte der Inbetriebnahme mit Status/Notiz je Profil, Protokoll-Export (Markdown), „als verifiziert markieren" erst nach allen Pflichtschritten und mit Prüfername (Standardprofile bleiben unverändert). Echte Loopback-/Empfangs-/Format-Ergebnisse haken die Schritte automatisch ab (nie im Simulator).
+- **Profile exportieren/importieren** (JSON, mit Prüfung; ID-Konflikte erhalten neue ID).
+- **Menüleiste:** Datei (Öffnen, zuletzt geöffnet, Beenden), Ansicht (Schriftgröße), Werkzeuge, Hilfe (eingebautes Handbuch F1, Über).
+- Eingebautes Handbuch: alle Dokumente werden mit Programm und Installer ausgeliefert.
+- NC-Dateien per Drag & Drop oder als Startparameter laden (es wird nie automatisch gesendet); optional „Öffnen mit" für `.nc` im Installer.
+- Schriftgröße 80–200 % (Strg + / Strg - / Strg 0).
+
+### Behoben
+- Fenster passt auf kleine Bildschirme (Mindestbreite vorher ca. 1350 Pixel); Seiten scrollen bei Bedarf.
+- Unerwartete Programmfehler werden jetzt als Meldung angezeigt (zuvor nur im Log).
+- Nur noch eine DeckelLink-Instanz pro Datenordner (verhindert Konflikte am Anschluss).
+- Installer enthielt README/Lizenz/CHANGELOG nicht.
+
+### Geändert
+- GitHub-Actions auf aktuelle Versionen (checkout v7, setup-python v7, upload-artifact v7, download-artifact v8, action-gh-release v3).
+
 ## [0.4.1] – 2026-11-18
 
 ### Behoben

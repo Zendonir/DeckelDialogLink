@@ -1,5 +1,7 @@
 # Sichere Inbetriebnahme
 
+> Tipp: *Werkzeuge → Inbetriebnahme-Assistent* bildet diese Schritte ab, dokumentiert Status und Notizen je Profil und exportiert ein Protokoll. Ergebnisse echter Loopback-Tests, Empfänge und Formatermittlungen werden dort automatisch abgehakt.
+
 Ziel: Die Kommunikation schrittweise und ohne Risiko für Maschine und Programme verifizieren. Arbeiten Sie nach den betrieblichen Sicherheitsvorgaben; die Maschine bleibt während der gesamten Inbetriebnahme unter Kontrolle des Bedieners.
 
 ## 1. Maschinenanschluss identifizieren
@@ -24,11 +26,17 @@ Ziel: Die Kommunikation schrittweise und ohne Risiko für Maschine und Programme
 - *Diagnose → Loopback-Test*, Realbetrieb, richtiger COM-Port.
 - Ergebnis „Bestanden" ist Voraussetzung für die nächsten Schritte. Bei Fehlern: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
+## 5a. Optional: Datenformat durch Mitlesen ermitteln
+- *Werkzeuge → Datenformat ermitteln*: DeckelLink öffnet den Port als 8N1 mit der Baudrate des Profils und liest nur mit. An der CNC ein möglichst langes Programm ausgeben.
+- Das Ergebnis (z. B. 7E1) ist ein Hinweis; über „Als Profilkopie übernehmen" entsteht ein neues, unverifiziertes Profil. Viele unlesbare Zeichen bedeuten eine falsche Baudrate.
+- Bei Netzwerkadaptern im Modus TCP-Rohdaten den Adapter dafür auf 8N1 stellen.
+
 ## 6. Zuerst Programm von der CNC zum PC empfangen
 - Empfangsrichtung zuerst, weil dabei nichts in die Steuerung geschrieben wird.
 - *Empfangen → Empfang starten*, dann an der CNC die Ausgabe eines vorhandenen, bekannten Programms starten.
 
 ## 7. Rohbytes analysieren
+- Tipp: Die Rohdaten aus `raw/` lassen sich im Simulator-Szenario „Aufzeichnung abspielen" wiedergeben.
 - HEX-Vorschau und Terminal prüfen: Zeichen korrekt? Bytes > 0x7F (Paritätsproblem)? Welche Zeichen vor dem Programm und nach `M30`? Welches Zeilenende?
 - Erkenntnisse in die Checkliste übernehmen und das Profil anpassen (Endsequenz, Zeilenende, Nullbytes).
 

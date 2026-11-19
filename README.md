@@ -124,6 +124,17 @@ Dateinamen: `RECEIVED_JJJJMMTT_HHMMSS.nc`, bei Konflikten `_001`, `_002` … Vor
 - Ungültige Profildateien führen nicht zum Absturz; die fehlerhaften Felder werden angezeigt, es wird auf ein sicheres Standardprofil zurückgefallen.
 - Unsichere Kombinationen (z. B. unbegrenzter Empfang, sehr kurze Timeouts, aktiviertes M30-Ergänzen, unbekannte Startsequenz) werden als Warnung angezeigt.
 
+## Inbetriebnahme-Werkzeuge
+
+- **Werkzeuge → Inbetriebnahme-Assistent:** führt durch die Schritte aus [docs/COMMISSIONING.md](docs/COMMISSIONING.md), dokumentiert Status und Notizen, exportiert ein Protokoll und markiert das Profil erst nach allen Pflichtschritten als verifiziert.
+- **Werkzeuge → Datenformat ermitteln:** DeckelLink liest nur mit (8N1) und schätzt aus den Daten der CNC Parität und Datenbits – klärt z. B. 7N1 vs. 7E1, ohne etwas zu senden.
+- **Simulator „Aufzeichnung abspielen":** spielt echte Rohdaten aus `raw/` ab, um am Schreibtisch mit dem realen Verhalten weiterzutesten.
+- **Profile exportieren/importieren:** geprüfte Profile weitergeben.
+
+## Bedienung
+
+Menü *Datei* (Öffnen, zuletzt geöffnete Dateien), Drag & Drop von NC-Dateien auf das Fenster, *Ansicht* für größere Schrift (Strg +/–), *Hilfe → Handbuch* (F1) mit allen Dokumenten. Es läuft immer nur eine Instanz.
+
 ## Diagnose
 
 - *Terminal*: TX/RX-Verkehr in ASCII, HEX oder kombiniert, begrenzte Historie, optionales Rohdatenprotokoll.
@@ -141,7 +152,7 @@ mypy
 pytest --cov=deckellink
 ```
 
-Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 302 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
+Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 334 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
 
 ## Installation (Windows)
 

@@ -96,6 +96,17 @@ gui/pages/parameters_page.py, gui/dialogs/parameter_write_dialog.py
 
 Die Sitzungsfreischaltung liegt nur im Speicher von `MainWindow` (`param_unlocked`) und wird nie gespeichert. Nach einem Schreibvorgang wird die Sicherung verworfen; das nächste Auslesen wird automatisch mit den geschriebenen Daten verglichen.
 
+## Inbetriebnahme-Werkzeuge und Komfort (0.5)
+
+```
+diagnostics/format_detect.py   passive Paritätserkennung (8N1-Mitschnitt, nur read), reine Auswertefunktion
+commissioning.py               Schritte, Fortschritt je Profil (JSON), Markdown-Protokoll
+gui/app_support.py             Fehlerdialog (sys/threading excepthook), Einzelinstanz (QLockFile), Doku-Pfade
+gui/dialogs/help_dialog.py     Handbuch (QTextBrowser rendert die mitgelieferten Markdown-Dateien)
+```
+
+Die Seiten liegen in `QScrollArea`s, damit das Fenster auf kleinen Bildschirmen nutzbar bleibt. Das Design ist fest hell (Fusion + eigene Palette), die Schriftgröße skaliert über `build_stylesheet(scale)`.
+
 ## Abweichungen von der Vorgabestruktur
 
 | Vorgabe | Umsetzung | Grund |

@@ -8,7 +8,7 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-from deckellink.domain.errors import DeckelLinkError
+from deckellink.domain.errors import DeckelLinkError, FieldError, ProfileValidationError
 from deckellink.domain.models import FALLBACK_PROFILE, Profile
 from deckellink.profiles.loader import ProfileLoadResult, load_profile_file
 from deckellink.profiles.schema import parse_profile
@@ -174,3 +174,46 @@ class ProfileRepository:
         self._warnings.pop(profile_id, None)
         self._paths.pop(profile_id, None)
         log.info("Profile deleted (backup kept): %s", profile_id)
+
+    # -- exchange ----------------------------------------------------------------
+    def export_profile(self, profile_id: str, target: Path, *, overwrite: bool = False) -> Path | None:
+        """Write a profile as JSON. Existing targets are only replaced with ``overwrite`` (backup first).
+
+        Returns the backup path if one was created.
+        """
+        profile = self.get(profile_id)
+        if profile is None:
+            raise ProfileRepositoryError(f"Profil '{profile_id}' nicht gefunden.")
+        backup: Path | None = None
+        if target.exists():
+            if not overwrite:
+                raise ProfileRepositoryError(f"Datei existiert bereits: {target.name}")
+            if self._backups is not None:
+                backup = self._backups.backup(target)
+        payload = (json.dumps(profile.to_dict(), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+        atomic_write_bytes(target, payload, overwrite=True)
+        log.info("Profile exported: %s -> %s", profile_id, target.name)
+        return backup
+
+    def import_profile(self, source: Path) -> tuple[Profile, list[str]]:
+        """Validate a profile file and store it as a user profile (never as builtin).
+
+        An id that already exists gets a new unique id; the verification status is kept
+        as stored in the file but reported in the warnings.
+        """
+        result = load_profile_file(source)
+        if result.profile is None:
+            raise ProfileValidationError(
+                result.field_errors or [FieldError("(Datei)", result.error or "")], source.name
+            )
+        profile = result.profile
+        warnings = list(result.warnings)
+        if profile.id in self._profiles or (self.user_dir / f"{profile.id}.json").exists():
+            new_id = self.unique_id(f"{profile.id}_import")
+            warnings.append(f"Profil-ID '{profile.id}' existiert bereits - importiert als '{new_id}'.")
+            profile = replace(profile, id=new_id, display_name=f"{profile.display_name} (Import)"[:120])
+        stored, save_warnings = self.save(replace(profile, builtin=False))
+        if stored.verification_status.value == "verified":
+            warnings.append("Das importierte Profil ist als 'verifiziert' gekennzeichnet - Herkunft prüfen.")
+        log.info("Profile imported from %s as %s", source.name, stored.id)
+        return stored, warnings + [w for w in save_warnings if w not in warnings]

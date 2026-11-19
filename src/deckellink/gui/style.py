@@ -42,14 +42,14 @@ REAL_BANNER_STYLE = (
     "background-color: #8b0000; color: #ffffff; font-weight: bold; padding: 6px 12px;border: 3px solid #ffffff;"
 )
 
-APP_STYLESHEET = """
-QWidget { font-size: 10pt; }
+_STYLESHEET_TEMPLATE = """
+QWidget { font-size: {base}pt; }
 QMainWindow { background: #eceff1; }
 QFrame#HeaderBar { background: #263238; }
 QFrame#HeaderBar QLabel { color: #eceff1; }
-QLabel#MachineTitle { font-size: 16pt; font-weight: bold; color: #ffffff; }
-QLabel#ControlTitle { font-size: 11pt; color: #b0bec5; }
-QListWidget#Navigation { background: #37474f; color: #eceff1; border: none; font-size: 11pt; }
+QLabel#MachineTitle { font-size: {title}pt; font-weight: bold; color: #ffffff; }
+QLabel#ControlTitle { font-size: {sub}pt; color: #b0bec5; }
+QListWidget#Navigation { background: #37474f; color: #eceff1; border: none; font-size: {sub}pt; }
 QListWidget#Navigation::item { padding: 10px 14px; }
 QListWidget#Navigation::item:selected { background: #546e7a; color: #ffffff; }
 QGroupBox { font-weight: bold; border: 1px solid #b0bec5; border-radius: 3px; margin-top: 12px;
@@ -61,10 +61,22 @@ QPushButton#PrimaryButton:disabled { background: #90a4ae; color: #eceff1; }
 QPushButton#CancelButton { background: #b3261e; color: white; font-weight: bold; }
 QPushButton#CancelButton:disabled { background: #cfd8dc; color: #78909c; }
 QFrame#ErrorPanel { background: #fdecea; border: 2px solid #b3261e; border-radius: 3px; }
-QLabel#ErrorTitle { color: #8b0000; font-weight: bold; font-size: 11pt; }
+QLabel#ErrorTitle { color: #8b0000; font-weight: bold; font-size: {sub}pt; }
 QPlainTextEdit, QTextEdit { font-family: Consolas, "DejaVu Sans Mono", monospace; }
 QProgressBar { min-height: 22px; text-align: center; }
 """
+
+
+def build_stylesheet(scale: float = 1.0) -> str:
+    """Stylesheet with font sizes scaled by ``scale`` (1.0 = 100 %)."""
+    sizes = {"{base}": 10, "{sub}": 11, "{title}": 16}
+    text = _STYLESHEET_TEMPLATE
+    for key, points in sizes.items():
+        text = text.replace(key, f"{points * scale:.1f}")
+    return text
+
+
+APP_STYLESHEET = build_stylesheet()
 
 
 # --------------------------------------------------------------------------
@@ -115,12 +127,12 @@ def light_palette() -> QPalette:
     return palette
 
 
-def apply_theme(app: QApplication) -> None:
-    """Apply the fixed light theme, independent of the OS colour scheme."""
+def apply_theme(app: QApplication, scale: float = 1.0) -> None:
+    """Apply the fixed light theme (independent of the OS colour scheme) with a font scale."""
     hints = app.styleHints()
     set_scheme = getattr(hints, "setColorScheme", None)  # Qt >= 6.8
     if callable(set_scheme):
         set_scheme(Qt.ColorScheme.Light)
     app.setStyle("Fusion")
     app.setPalette(light_palette())
-    app.setStyleSheet(APP_STYLESHEET)
+    app.setStyleSheet(build_stylesheet(scale))

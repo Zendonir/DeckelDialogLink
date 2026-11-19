@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from deckellink.gui.style import REAL_BANNER_STYLE, SIMULATION_BANNER_STYLE, StatusKind
 from deckellink.gui.widgets.status import StatusIndicator
@@ -25,11 +25,14 @@ class HeaderBar(QFrame):
 
         info = QVBoxLayout()
         self.status = StatusIndicator()
+        self.status.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         info.addWidget(self.status)
         self.connection_label = QLabel()
+        self.connection_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.connection_label.setAccessibleName("Verbindungsparameter")
         info.addWidget(self.connection_label)
         self.profile_label = QLabel()
+        self.profile_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.profile_label.setAccessibleName("Aktives Profil")
         info.addWidget(self.profile_label)
         layout.addLayout(info, 1)

@@ -65,6 +65,12 @@ Im Terminal erscheinen Steuerzeichen lesbar als `<ENQ>`, `<DLE>`, `<STX>`, `<ETX
 ## Profil ungültig
 Die fehlerhaften Felder werden unter *Einstellungen* angezeigt; DeckelLink verwendet dann ein sicheres Standardprofil. Profildateien liegen im Ordner `profiles/` des Datenverzeichnisses.
 
+## „DeckelLink läuft bereits"
+Es darf nur eine Instanz pro Datenordner laufen. Das vorhandene Fenster verwenden (ggf. in der Taskleiste). Nach einem Absturz wird die verwaiste Sperre beim nächsten Start automatisch entfernt.
+
+## Unerwarteter Fehler
+Die Meldung enthält technische Details. Bitte *Diagnose → Diagnosepaket exportieren* und den Fehler melden. Prüfen Sie nach einem Fehler während einer Übertragung den Zustand an der CNC.
+
 ## Anwendung startet nicht (portable Version)
 - ZIP vollständig entpacken (nicht aus dem ZIP heraus starten).
 - `DeckelLink.exe --smoke-test --smoke-report bericht.json` ausführen und Bericht prüfen.

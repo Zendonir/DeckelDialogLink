@@ -63,6 +63,8 @@ a = Analysis(  # noqa: F821
     datas=[
         (str(RESOURCES / "profiles" / "*.json"), "deckellink/resources/profiles"),
         (str(RESOURCES / "icons" / "*"), "deckellink/resources/icons"),
+        (str(ROOT / "docs" / "*.md"), "deckellink/resources/docs"),
+        (str(ROOT / "README.md"), "deckellink/resources/docs"),
     ],
     hiddenimports=["serial.tools.list_ports"],
     hookspath=[],

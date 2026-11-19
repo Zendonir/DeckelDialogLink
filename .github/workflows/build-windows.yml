@@ -20,9 +20,9 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -61,6 +61,10 @@ jobs:
           Get-Content "$env:RUNNER_TEMP\smoke.json"
           if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
 
+      - name: Add README, licence and changelog to the program folder
+        shell: pwsh
+        run: Copy-Item README.md, LICENSE, CHANGELOG.md dist\DeckelLink\
+
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
@@ -81,6 +85,9 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "Setup failed with exit code $($p.ExitCode)" }
           $exe = Join-Path $dir "DeckelLink.exe"
           if (-not (Test-Path $exe)) { throw "Installed executable missing" }
+          foreach ($f in @("README.md", "LICENSE", "_internal\deckellink\resources\docs\SAFETY.md")) {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "Installed file missing: $f" }
+          }
           $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test","--data-dir","$env:RUNNER_TEMP\dl-installed","--smoke-report","$env:RUNNER_TEMP\installed.json" -Wait -PassThru
           Get-Content "$env:RUNNER_TEMP\installed.json"
           if ($p.ExitCode -ne 0) { throw "Installed smoke test failed with exit code $($p.ExitCode)" }
@@ -95,7 +102,6 @@ jobs:
         run: |
           $v = "${{ steps.meta.outputs.version }}"
           New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item README.md, LICENSE, CHANGELOG.md dist\DeckelLink\
           Compress-Archive -Path dist\DeckelLink -DestinationPath "release\DeckelLink-$v-windows-x64.zip"
           Copy-Item "dist\installer\DeckelLink-$v-Setup-x64.exe" release\
           Get-ChildItem release -File | ForEach-Object {
@@ -104,7 +110,7 @@ jobs:
           Get-Content release\SHA256SUMS.txt
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: DeckelLink-${{ steps.meta.outputs.version }}-windows-x64
           path: release/*
@@ -118,9 +124,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release
           merge-multiple: true
@@ -129,7 +135,7 @@ jobs:
         run: python3 tools/release_notes.py "${{ needs.build.outputs.version }}" > release-notes.md
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: DeckelLink ${{ needs.build.outputs.version }}
           body_path: release-notes.md
