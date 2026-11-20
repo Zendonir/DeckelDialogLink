@@ -55,10 +55,10 @@ Ein Onefile-Build entpackt bei jedem Start ca. 100–200 MB PySide6-Bibliotheken
 Installer selbst bauen (Inno Setup 6 installiert):
 
 ```bash
-iscc /DAppVersion=0.5.0 installer\deckellink.iss
+iscc /DAppVersion=0.5.1 installer\deckellink.iss
 ```
 
-Ergebnis: `dist\installer\DeckelLink-0.5.0-Setup-x64.exe`.
+Ergebnis: `dist\installer\DeckelLink-0.5.1-Setup-x64.exe`.
 
 ### Release erstellen
 Version in `src/deckellink/version.py` und `CHANGELOG.md` pflegen, dann Tag `v<version>` pushen. Der Workflow `build-windows.yml` baut, testet (auch eine stille Installation mit Selbsttest und Deinstallation) und veröffentlicht das GitHub-Release mit Installer, ZIP und Prüfsummen. Versionen `0.x` werden als Vorabversion markiert.

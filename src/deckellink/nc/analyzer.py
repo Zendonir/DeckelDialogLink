@@ -17,6 +17,7 @@ from deckellink.nc.checks import (
     max_value_for_data_bits,
     program_end_pattern,
     remove_comments,
+    split_eot_trailer,
     split_lines,
 )
 from deckellink.storage.checksums import sha256_bytes
@@ -52,6 +53,8 @@ def analyze(
     its number of data bits.
     """
     col = _Collector()
+    full = data
+    data, trailer = split_eot_trailer(full)
     lines = split_lines(data)
     endings = count_line_endings(lines)
     longest = max((len(line.content) for line in lines), default=0)
@@ -59,7 +62,15 @@ def analyze(
 
     if not data:
         col.add("EMPTY_FILE", Severity.ERROR, "Die Datei ist leer.")
-        return AnalysisResult(tuple(col.findings), 0, 0, endings, 0, False, sha256_bytes(data))
+        return AnalysisResult(tuple(col.findings), len(full), 0, endings, 0, False, sha256_bytes(full))
+    if trailer:
+        col.add(
+            "TRANSMISSION_END",
+            Severity.INFO,
+            "Die Datei endet mit dem Übertragungsende-Zeichen EOT (0x04), wie es die DIALOG 11 ausgibt."
+            + (" Es wird mitgesendet." if settings.send_eot_trailer else " Es wird laut Profil nicht gesendet."),
+            [len(lines) + 1],
+        )
 
     if len(data) > settings.max_program_bytes > 0:
         col.add(
@@ -86,12 +97,12 @@ def analyze(
     findings = sorted(col.findings, key=lambda f: -f.severity.rank)
     return AnalysisResult(
         tuple(findings),
-        len(data),
+        len(full),
         len(lines),
         endings,
         longest,
         has_end,
-        sha256_bytes(data),
+        sha256_bytes(full),
     )
 
 

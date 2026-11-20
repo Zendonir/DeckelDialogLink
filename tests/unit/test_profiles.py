@@ -41,7 +41,8 @@ def test_both_builtin_profiles_load(repo: ProfileRepository) -> None:
     assert not b.serial.xon_xoff and not b.serial.dsr_dtr
     assert a.verification_status is VerificationStatus.UNVERIFIED
     assert b.verification_status is VerificationStatus.UNVERIFIED
-    assert a.transfer.program_end == "M30" and a.transfer.program_start == ""
+    assert a.transfer.program_end == "M30,M2" and a.transfer.program_start == ""
+    assert a.receive.end_sequence == "M30,M2" and a.receive.end_on_eot and a.transfer.send_eot_trailer
     assert not a.transfer.append_program_end
 
 
@@ -146,7 +147,7 @@ def test_safety_warnings() -> None:
         "Mehrere Flusssteuerungen",
         "Unbegrenzter Empfang",
         "Extrem kurze Timeouts",
-        "Ergänzen von 'M30'",
+        "Ergänzen von 'M30,M2'",
         "M82",
     ):
         assert expected in text

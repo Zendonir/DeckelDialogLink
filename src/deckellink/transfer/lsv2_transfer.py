@@ -127,6 +127,9 @@ class Lsv2ProgramSender:
                 progress = tracker.advance(end - tracker.bytes_done)
                 if self.callbacks.on_progress:
                     self.callbacks.on_progress(progress)
+            if tracker.bytes_done < len(payload.data):
+                # A trailing EOT of the file is replaced by the link-level EOT.
+                tracker.advance(len(payload.data) - tracker.bytes_done)
             for template in p.end_telegrams:
                 link.send_telegram(_template(template, self.program_name), ack_timeout)
             self._set_state(SendState.FINISHING)

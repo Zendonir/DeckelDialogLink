@@ -17,8 +17,10 @@ from deckellink.domain.results import TransformResult
 from deckellink.nc.checks import (
     is_blank,
     is_semicolon_line,
+    primary_program_end,
     program_end_pattern,
     remove_comments,
+    split_eot_trailer,
     split_lines,
 )
 
@@ -39,7 +41,7 @@ def transform(
     ``append_program_end`` enabled before a missing program end is appended.
     """
     applied: list[str] = []
-    work = data
+    work, trailer = split_eot_trailer(data)
     if settings.strip_null_bytes and b"\x00" in work:
         work = work.replace(b"\x00", b"")
         applied.append("Nullbytes entfernt")
@@ -115,9 +117,10 @@ def transform(
         if not has_end:
             if out_lines and out_lines[-1][1] == b"":
                 out_lines[-1] = (out_lines[-1][0], target_ending)
-            out_lines.append((settings.program_end.strip().encode("ascii"), target_ending))
+            end_word = primary_program_end(settings.program_end)
+            out_lines.append((end_word.encode("ascii"), target_ending))
             appended = True
-            applied.append(f"Programmende '{settings.program_end.strip()}' ergänzt (bestätigt)")
+            applied.append(f"Programmende '{end_word}' ergänzt (bestätigt)")
 
     if settings.ensure_final_newline and out_lines and out_lines[-1][1] == b"":
         out_lines[-1] = (out_lines[-1][0], target_ending)
@@ -129,6 +132,14 @@ def transform(
         buffer += content
         buffer += ending
         offsets.append(len(buffer))
+    if trailer:
+        if settings.send_eot_trailer:
+            buffer += b"\x04"
+            if b"\n" in trailer or b"\r" in trailer:
+                buffer += target_ending
+            applied.append("Übertragungsende EOT am Dateiende wird mitgesendet")
+        else:
+            applied.append("Übertragungsende EOT am Dateiende entfernt")
     result = bytes(buffer)
 
     if settings.encoding.lower() == "ascii":

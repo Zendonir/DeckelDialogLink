@@ -13,6 +13,7 @@ from deckellink.clock import FakeClock
 from deckellink.domain.errors import ProfileValidationError
 from deckellink.domain.models import Profile
 from deckellink.domain.states import EndReason, ReceiveState, SendState
+from deckellink.nc.checks import split_eot_trailer
 from deckellink.parameters.archive import ParameterArchive
 from deckellink.parameters.service import (
     WRITE_CONFIRMATION_PHRASE,
@@ -37,6 +38,14 @@ from deckellink.transfer.receiver import process_received
 from deckellink.transport.simulated_transport import SimulatedTransport, SimulationConfig
 
 NOW = datetime(2026, 11, 18, 10, 0, tzinfo=UTC)
+SAMPLE_BODY = split_eot_trailer(SAMPLE_PARAMETERS)[0]
+
+
+def edited(old: bytes, new: bytes, *, checksum: bool = True, data: bytes = SAMPLE_PARAMETERS) -> bytes:
+    """Change a parameter line of group 01 and (by default) its checksum, like the CNC would."""
+    assert old in data
+    result = data.replace(old, new)
+    return result.replace(b"?\r\nC001\r\n", b"?\r\nC0FF\r\n") if checksum else result
 
 
 def writable(profile: Profile) -> Profile:
@@ -59,7 +68,7 @@ def gate(base: Profile, **overrides: object) -> ParameterWriteGate:
     args: dict[str, object] = {
         "profile": writable(base),
         "session_unlocked": True,
-        "candidate": candidate(base, SAMPLE_PARAMETERS.replace(b"P0001=37", b"P0001=38")),
+        "candidate": candidate(base, edited(b"M01001 37\r\n", b"M01001 38\r\n")),
         "backup": backup(base),
         "now": NOW,
         "port_label": "SIMULATOR",
@@ -107,7 +116,8 @@ def test_parameter_analysis(profile_a: Profile) -> None:
     assert not ok.has_errors and not ok.has("MISSING_PROGRAM_END")
     bad = analyze_parameters("P1=Ä\r\n".encode("latin-1"), profile_a)
     assert bad.has_errors
-    tabs = analyze_parameters(b"P1\t=1\r\n", profile_a)
+    unpatterned = replace(profile_a, parameters=replace(profile_a.parameters, identification_pattern=""))
+    tabs = analyze_parameters(b"P1\t=1\r\n", unpatterned)
     assert tabs.get("TABS") is not None and not tabs.has_errors
     patterned = replace(profile_a, parameters=replace(profile_a.parameters, identification_pattern=r"^\(PARAM"))
     assert analyze_parameters(b"N10 G00 X0\r\nM30\r\n", patterned).has("NOT_A_PARAMETER_FILE")
@@ -131,7 +141,7 @@ def test_diff() -> None:
 def test_gate_allows_only_when_all_conditions_hold(profile_a: Profile) -> None:
     ok = gate(profile_a)
     assert ok.allowed, ok.reason_text
-    assert ok.diff is not None and ok.diff.changed_lines == 1
+    assert ok.diff is not None and ok.diff.changed_lines == 2  # value and checksum
 
 
 @pytest.mark.parametrize(
@@ -170,7 +180,7 @@ def test_read_store_and_list_parameters(profile_a: Profile, tmp_path: Path) -> N
     clock = FakeClock()
     transport = SimulatedTransport(profile_a.serial, SimulationConfig(machine_program=SAMPLE_PARAMETERS), clock)
     result = read_parameters(transport, profile_a, clock=clock, token=CancellationToken())
-    assert result.state is ReceiveState.COMPLETED and result.end_reason is EndReason.INACTIVITY
+    assert result.state is ReceiveState.COMPLETED and result.end_reason is EndReason.EOT
     assert result.raw == SAMPLE_PARAMETERS
     program = process_received(result, parameter_profile(profile_a))
     assert program.complete
@@ -193,7 +203,7 @@ def test_read_store_and_list_parameters(profile_a: Profile, tmp_path: Path) -> N
 
 
 def test_write_parameters_plain_and_lsv2(profile_a: Profile, repo: ProfileRepository) -> None:
-    data = SAMPLE_PARAMETERS.replace(b"P0002=74", b"P0002=75")
+    data = edited(b"M01002 74\r\n", b"M01002 75\r\n")
     clock = FakeClock()
     transport = SimulatedTransport(profile_a.serial, SimulationConfig(), clock)
     payload = prepare_parameter_payload(data, profile_a)
@@ -209,12 +219,12 @@ def test_write_parameters_plain_and_lsv2(profile_a: Profile, repo: ProfileReposi
         cnc, lsv2, prepare_parameter_payload(data, lsv2), clock=clock2, token=CancellationToken()
     )
     assert result2.state is SendState.COMPLETED
-    assert cnc.received_program == data and cnc.eot_received
+    assert cnc.received_program == split_eot_trailer(data)[0] and cnc.eot_received
     clock3 = FakeClock()
     sender_cnc = Lsv2SimulatedCnc(lsv2.serial, lsv2.protocol, Lsv2SimConfig(program=SAMPLE_PARAMETERS), clock3)
     read = read_parameters(sender_cnc, lsv2, clock=clock3, token=CancellationToken())
-    assert read.state is ReceiveState.COMPLETED and read.raw == SAMPLE_PARAMETERS
+    assert read.state is ReceiveState.COMPLETED and read.raw == SAMPLE_BODY  # EOT is link level
 
 
 def test_sample_parameters_are_marked_as_simulation() -> None:
-    assert b"KEIN ECHTES DIALOG-11-FORMAT" in SAMPLE_PARAMETERS
+    assert b"M65000 SIMULATION" in SAMPLE_PARAMETERS and b"M65033 SIMULATOR" in SAMPLE_PARAMETERS

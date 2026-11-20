@@ -30,7 +30,7 @@
     "encoding": "ascii",
     "line_ending": "crlf",
     "program_start": "",
-    "program_end": "M30",
+    "program_end": "M30,M2",
     "append_program_end": false,
     "start_delay_ms": 1000,
     "end_delay_ms": 1000,
@@ -47,13 +47,14 @@
     "comment_open": "(",
     "comment_close": ")",
     "ensure_final_newline": true,
+    "send_eot_trailer": true,
     "max_line_length": 120,
     "max_program_bytes": 500000,
     "close_port_after_send": true
   },
   "receive": {
     "end_detection": "both",
-    "end_sequence": "M30",
+    "end_sequence": "M30,M2",
     "inactivity_timeout_ms": 5000,
     "first_byte_timeout_ms": 120000,
     "end_grace_ms": 500,
@@ -61,6 +62,7 @@
     "strip_null_bytes": true,
     "normalize_line_endings": true,
     "save_raw": true,
+    "end_on_eot": true,
     "program_name_pattern": ""
   },
   "protocol": {
@@ -79,5 +81,13 @@
     "start_telegrams": [],
     "end_telegrams": [],
     "send_eot_on_cancel": true
+  },
+  "parameters": {
+    "allow_write": false,
+    "inactivity_timeout_ms": 5000,
+    "first_byte_timeout_ms": 120000,
+    "max_bytes": 1000000,
+    "identification_pattern": "(?m)^%M[DP]G00 \\(KOPF\\)",
+    "max_backup_age_min": 60
   }
 }

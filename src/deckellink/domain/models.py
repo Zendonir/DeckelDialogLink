@@ -195,6 +195,7 @@ class TransferSettings:
     comment_open: str = "("
     comment_close: str = ")"
     ensure_final_newline: bool = True
+    send_eot_trailer: bool = True
     max_line_length: int = 120
     max_program_bytes: int = 500_000
     close_port_after_send: bool = True
@@ -213,6 +214,7 @@ class ReceiveSettings:
     strip_null_bytes: bool = True
     normalize_line_endings: bool = True
     save_raw: bool = True
+    end_on_eot: bool = True
     program_name_pattern: str = ""
 
 

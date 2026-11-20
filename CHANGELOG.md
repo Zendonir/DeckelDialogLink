@@ -2,6 +2,21 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.5.1] – 2026-11-20
+
+**Nur gegen den Simulator getestet.** Grundlage der Änderungen ist eine echte Parameterausgabe einer FP2A (nicht im Repository enthalten).
+
+### Behoben
+- **EOT am Dateiende:** Von der DIALOG 11 ausgegebene Dateien enden mit `EOT` (0x04). Bisher wurde das als unzulässiges Steuerzeichen gemeldet und das Senden gesperrt. Jetzt Hinweis statt Fehler; `EOT` wird standardmäßig mitgesendet (`transfer.send_eot_trailer`). Bei LSV2 ersetzt das Protokoll-`EOT` das Datei-`EOT`.
+- **Empfang endet bei EOT** (`receive.end_on_eot`), auch ohne `M30`; ein direkt auf `M30` folgendes `EOT` wird mit übernommen, andere Daten danach weiterhin nicht.
+
+### Hinzugefügt
+- **`M2` als zusätzliches Programmende** (Profil `M30,M2`; mehrere Alternativen kommagetrennt, `M2` erkennt auch `M02`).
+- **Parameterdatei-Struktur:** Erkennung über Kopfgruppe `%MPG00`/`%MDG00 (KOPF)`; Prüfung von Gruppen, Zeilenformat, Gruppenende `?` und Prüfsummenzeile. Anzeige von Format, Softwarestand, Maschinentyp und -nummer.
+- **Schreibsperre bei geänderter Gruppe mit alter Prüfsumme** (Prüfsummenverfahren unbekannt, wird nicht berechnet).
+- **Schreibsperre bei abweichendem Softwarestand, Maschinennummer oder Format** gegenüber der aktuellen Sicherung.
+- Simulator-Parameter im beobachteten Format (eindeutig als `SIMULATION` gekennzeichnet).
+
 ## [0.5.0] – 2026-11-19
 
 **Nur gegen den Simulator getestet.**

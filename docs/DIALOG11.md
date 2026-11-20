@@ -25,13 +25,19 @@ Hinweis zur Fehlersuche: Eine falsche Parität zeigt sich typischerweise als ver
 - Umlaute und Steuerzeichen werden vor dem Senden als Fehler gemeldet.
 - Ob die Steuerung Tabulatoren, Semikolonzeilen oder Kommentare in runden Klammern akzeptiert, ist **nicht verifiziert**; das Verhalten ist im Profil konfigurierbar.
 
-## Programmende M30
+## Programmende M30 / M2
 
-`M30` ist im Profil als **konfigurierbares** Programmende hinterlegt. Es dient
+`M30,M2` ist im Profil als **konfigurierbares** Programmende hinterlegt (mehrere Alternativen durch Komma getrennt; `M2` erkennt auch `M02`). Dass die FP2A ein Programm nach `M2` oder `M30` beendet, geht aus dem PLC-Programm einer realen Maschine hervor. Es dient
 - der Prüfung („Programmende fehlt", „Daten nach Programmende"),
 - der Enderkennung beim Empfang.
 
-DeckelLink ergänzt `M30` niemals automatisch. Ein Ergänzen ist nur möglich, wenn das Profil es erlaubt **und** der Benutzer es für die einzelne Übertragung ausdrücklich bestätigt. Welche Zeichen die Steuerung nach `M30` erwartet oder sendet, ist ein offener Prüfpunkt.
+DeckelLink ergänzt ein Programmende niemals automatisch. Ein Ergänzen (immer die erste Alternative, also `M30`) ist nur möglich, wenn das Profil es erlaubt **und** der Benutzer es für die einzelne Übertragung ausdrücklich bestätigt. Welche Zeichen die Steuerung nach `M30` erwartet oder sendet, ist ein offener Prüfpunkt.
+
+## Übertragungsende EOT
+
+Dateien, die die DIALOG 11 ausgibt, enden mit dem Zeichen `EOT` (0x04) und CRLF (beobachtet an einer FP2A). DeckelLink
+- akzeptiert `EOT` am Dateiende (Hinweis statt Fehler) und sendet es standardmäßig mit (`transfer.send_eot_trailer`); ein `EOT` mitten in der Datei bleibt ein Fehler,
+- beendet den Empfang bei `EOT` (`receive.end_on_eot`) und übernimmt ein direkt auf `M30`/`M2` folgendes `EOT` in die Rohdaten.
 
 ## Startsequenz / M82
 

@@ -15,8 +15,8 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 | 9 | Kabelbelegung | unbekannt – keine Belegung vorgegeben | – | offen |
 | 10 | Programmkopf (Zeichen vor dem Programm, z. B. `%`, Leader, Nullbytes) | keiner; Nullbytes werden entfernt | `transfer.program_start`, `strip_null_bytes` | offen |
 | 11 | Verwendung von M82 | nicht verwendet (Startsequenz leer) | `transfer.program_start` | offen |
-| 12 | Programmende | `M30` | `transfer.program_end`, `receive.end_sequence` | offen |
-| 13 | Notwendige Zeichen nach M30 (CRLF? weitere?) | CRLF; Nachlaufzeit 500 ms beim Empfang | `transfer.line_ending`, `receive.end_grace_ms` | offen |
+| 12 | Programmende | `M30,M2` (laut PLC-Programm einer FP2A) | `transfer.program_end`, `receive.end_sequence` | teilweise (Quelle PLC) |
+| 13 | Notwendige Zeichen nach M30 (CRLF? weitere?) | CRLF, danach `EOT` CRLF am Dateiende (in Parameterausgabe beobachtet); Nachlaufzeit 500 ms | `transfer.line_ending`, `transfer.send_eot_trailer`, `receive.end_on_eot`, `receive.end_grace_ms` | teilweise (EOT bei Parametern beobachtet, bei NC-Programmen offen) |
 | 14 | Maximale Zeilenlänge | Warnung ab 120 Zeichen | `transfer.max_line_length` | offen |
 | 15 | Maximale Programmgröße | Warnung ab 500 000 Bytes; Empfangslimit 2 000 000 Bytes | `transfer.max_program_bytes`, `receive.max_receive_bytes` | offen |
 | 16 | Dateinamen-/Programmnummernformat | nicht ausgewertet → `RECEIVED_<Zeit>.nc` | `receive.program_name_pattern` | offen |
@@ -38,12 +38,14 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 | 32 | Verhalten der CNC bei Abbruch (EOT vom PC, EOT von der CNC) und bei Unterbrechung der Datenzufuhr | PC sendet EOT bei Abbruch | `protocol.send_eot_on_cancel` | offen |
 | 33 | Programmausgabe der CNC per LSV2 (Empfang) | ENQ von der CNC, Ende mit EOT | – | offen |
 | 34 | Kann die DIALOG 11 Maschinenparameter über V.24 ausgeben bzw. einlesen? Bedienfolge an der Steuerung | angenommen: ja, vom Bediener ausgelöst | – | offen |
-| 35 | Format der Parameterdatei (Kopf, Kennung, Zeilenaufbau, Ende) | unbekannt – unverändert übernommen | `parameters.identification_pattern` | offen |
-| 36 | Ende der Parameterausgabe | Inaktivität 5 s bzw. EOT (LSV2) | `parameters.inactivity_timeout_ms` | offen |
+| 35 | Format der Parameterdatei (Kopf, Kennung, Zeilenaufbau, Ende) | `%MPGnn`/`%MDGnn (NAME)`, `Mnnnnn Wert`, `?` + 4-Hex-Prüfsumme, `EOT` – aus echter Ausgabe abgeleitet | `parameters.identification_pattern` | teilweise (Datei beobachtet, Einlesen offen) |
+| 36 | Ende der Parameterausgabe | `EOT`, ersatzweise Inaktivität 5 s | `receive.end_on_eot`, `parameters.inactivity_timeout_ms` | teilweise (EOT in Datei beobachtet) |
 | 37 | Schutz der Parametereingabe (Schlüsselschalter, Schlüsselzahl, Betriebsart) | muss an der CNC freigegeben werden | – | offen |
 | 38 | Akzeptiert die Steuerung eine vollständige Parameterdatei oder nur Teilmengen? | vollständige Datei | – | offen |
 | 39 | Verhalten der Steuerung bei fehlerhafter oder abgebrochener Parametereingabe | unbekannt | – | offen |
 | 40 | Gleiche Schnittstellenparameter/Protokoll wie für NC-Programme? | ja (gleiches Profil) | `serial.*`, `protocol.*` | offen |
+| 42 | Prüfsummenverfahren der Parametergruppen | unbekannt – wird nie berechnet; geänderte Gruppe mit alter Prüfsumme wird nicht geschrieben | – | offen |
+| 43 | Lehnt die Steuerung Parameterdateien eines anderen Softwarestands ab bzw. ist das gefährlich? | Schreiben nur bei gleichem Softwarestand und gleicher Maschinennummer wie die Sicherung | – | offen |
 | 41 | Betrieb über RS-232/Ethernet-Adapter: Modell, Modus (TCP-Server/RFC 2217), Adapter-Einstellungen, Handshake im Adapter | nur gegen lokalen TCP-Testserver geprüft | Einstellungen → Verbindungsart | offen |
 
 ## Protokoll der Verifikation

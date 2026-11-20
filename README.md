@@ -152,7 +152,7 @@ mypy
 pytest --cov=deckellink
 ```
 
-Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 334 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
+Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 361 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
 
 ## Installation (Windows)
 

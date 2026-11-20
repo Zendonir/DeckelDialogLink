@@ -1138,6 +1138,7 @@ class MainWindow(QMainWindow):
             page.backup_label.setText(
                 f"Aktuelle Sicherung: {stored.path.name}, {len(program.normalized)} Bytes, "
                 f"SHA-256 {stored.sha256[:16]}…, ausgelesen {datetime.now():%H:%M:%S}"
+                + (f"\n{structure.summary}" if (structure := self.param_backup.structure) else "")
             )
             if self.last_written_parameters is not None:
                 check = diff_parameters(self.last_written_parameters, program.normalized, "geschrieben", "ausgelesen")

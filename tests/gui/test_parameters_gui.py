@@ -65,10 +65,13 @@ def test_read_write_and_verify_cycle(qtbot: QtBot, make_window: WindowFactory, p
     assert page.tree.topLevelItemCount() == 1
 
     edited = tmp_path / "EDIT.par"
-    edited.write_bytes(SAMPLE_PARAMETERS.replace(b"P0003=111", b"P0003=112"))
+    edited.write_bytes(
+        SAMPLE_PARAMETERS.replace(b"M01003 111\r\n", b"M01003 112\r\n").replace(b"?\r\nC001\r\n", b"?\r\nC0FF\r\n")
+    )
     window.select_parameter_file(edited)
-    assert "1 geänderte" in page.diff_summary.text()
-    assert "+P0003=112" in page.diff_view.toPlainText()
+    assert "2 geänderte" in page.diff_summary.text()
+    assert "Software SIM" in page.candidate_format.text() and "Maschine SIMULATOR" in page.backup_label.text()
+    assert "+M01003 112" in page.diff_view.toPlainText()
     assert not page.write_button.isEnabled()  # profile does not allow writing yet
 
     make_writable_profile(window)
@@ -96,11 +99,11 @@ def test_read_write_and_verify_cycle(qtbot: QtBot, make_window: WindowFactory, p
     window.confirm_parameter_write = accept
     page.write_button.click()
     wait_idle(qtbot, window)
-    assert confirmations[-1].diff.changed_lines == 1
+    assert confirmations[-1].diff.changed_lines == 2
     assert window.last_written_parameters == edited.read_bytes()
     assert window.param_backup is None  # a new read is required
     assert not page.write_button.isEnabled()
-    assert edited.read_bytes().endswith(b"(ENDE SIMULATION)\r\n")  # original untouched
+    assert b"M01003 112" in edited.read_bytes() and edited.read_bytes().endswith(b"\x04\r\n")  # untouched
 
     # Read back: simulator returns the original sample -> deviation detected
     read_parameters(qtbot, window)
@@ -124,7 +127,7 @@ def test_parameter_read_with_lsv2_profile(qtbot: QtBot, make_window: WindowFacto
     window = make_window(AppConfig(active_profile_id="dialog11_lsv2_7e1"))
     read_parameters(qtbot, window)
     assert window.param_backup is not None
-    assert window.param_backup.data == SAMPLE_PARAMETERS
+    assert window.param_backup.data == SAMPLE_PARAMETERS[: SAMPLE_PARAMETERS.index(b"\x04")]  # EOT is link level
 
 
 def test_parameter_read_error_shown(qtbot: QtBot, make_window: WindowFactory) -> None:

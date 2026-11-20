@@ -6,8 +6,9 @@ DeckelLink treats machine parameters as data files:
 * writing = sending a parameter file into a parameter input that the authorised
   operator has enabled at the CNC (key switch / code number).
 
-No remote parameter commands are sent. The DIALOG 11 parameter file format is
-not verified; parameter data is therefore transferred with minimal changes
+No remote parameter commands are sent. The parameter file structure is checked
+against the format observed on a real FP2A (see :mod:`.fileformat`); it is not
+an official specification. Parameter data is transferred with minimal changes
 (only NUL removal and line-ending normalisation).
 """
 
@@ -29,6 +30,7 @@ from deckellink.domain.models import (
 from deckellink.domain.results import AnalysisResult, Finding, Severity, TransformResult
 from deckellink.nc.analyzer import analyze
 from deckellink.nc.transformer import transform
+from deckellink.parameters.fileformat import ParameterFileInfo, compatibility_problems, parse_parameter_file
 from deckellink.storage.checksums import sha256_bytes
 
 WRITE_CONFIRMATION_PHRASE = "PARAMETER SCHREIBEN"
@@ -90,6 +92,9 @@ def analyze_parameters(data: bytes, profile: Profile) -> AnalysisResult:
                     f"Die Datei entspricht nicht dem im Profil hinterlegten Muster für Parameterdateien ({pattern!r}).",
                 )
             )
+    info = parse_parameter_file(data) if data else None
+    if info is not None:
+        findings.extend(info.findings)
     findings.sort(key=lambda f: -f.severity.rank)
     return replace(result, findings=tuple(findings))
 
@@ -161,6 +166,10 @@ class ParameterBackupInfo:
     def sha256(self) -> str:
         return sha256_bytes(self.data)
 
+    @property
+    def structure(self) -> ParameterFileInfo | None:
+        return parse_parameter_file(self.data)
+
 
 @dataclass
 class ParameterCandidate:
@@ -171,6 +180,10 @@ class ParameterCandidate:
     analysis: AnalysisResult
     payload: TransformResult | None
     transform_error: str | None = None
+
+    @property
+    def structure(self) -> ParameterFileInfo | None:
+        return parse_parameter_file(self.data)
 
 
 @dataclass
@@ -225,8 +238,21 @@ def evaluate_parameter_write_gate(
             diff = diff_parameters(backup.data, candidate.data, backup.path_name, candidate.name)
             if diff.identical:
                 reasons.append("Datei ist identisch mit der aktuellen Sicherung - nichts zu schreiben")
+            else:
+                reasons.extend(_structure_reasons(backup, candidate))
     if not simulation and not port:
         reasons.append("Kein COM-Port gewählt und Simulator nicht aktiv")
     if busy:
         reasons.append("Ein anderer Vorgang läuft")
     return ParameterWriteGate(not reasons, reasons, diff)
+
+
+def _structure_reasons(backup: ParameterBackupInfo, candidate: ParameterCandidate) -> list[str]:
+    """Format, software version, machine number and checksum consistency against the backup."""
+    backup_info = backup.structure
+    candidate_info = candidate.structure
+    if candidate_info is None:
+        return ["Parameterdatei hat keine erkennbare Gruppenstruktur (%MPGnn/%MDGnn)"]
+    if backup_info is None:
+        return ["Sicherung hat keine erkennbare Gruppenstruktur - Softwarestand nicht prüfbar"]
+    return compatibility_problems(backup_info, candidate_info)

@@ -92,6 +92,7 @@ TRANSFER_RULES: dict[str, Rule] = {
     "comment_open": Rule(str, max_length=2, printable=True),
     "comment_close": Rule(str, max_length=2, printable=True),
     "ensure_final_newline": Rule(bool),
+    "send_eot_trailer": Rule(bool),
     "max_line_length": Rule(int, 0, 100_000),
     "max_program_bytes": Rule(int, 0, MAX_BYTES_LIMIT),
     "close_port_after_send": Rule(bool),
@@ -107,6 +108,7 @@ RECEIVE_RULES: dict[str, Rule] = {
     "strip_null_bytes": Rule(bool),
     "normalize_line_endings": Rule(bool),
     "save_raw": Rule(bool),
+    "end_on_eot": Rule(bool),
     "program_name_pattern": Rule(str, max_length=200),
 }
 

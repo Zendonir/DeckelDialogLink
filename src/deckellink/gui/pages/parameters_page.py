@@ -136,8 +136,11 @@ class ParametersPage(QWidget):
         form = QFormLayout()
         self.candidate_name = QLabel("–")
         self.candidate_sha = QLabel("–")
+        self.candidate_format = QLabel("–")
+        self.candidate_format.setWordWrap(True)
         form.addRow("Datei:", self.candidate_name)
         form.addRow("SHA-256:", self.candidate_sha)
+        form.addRow("Aufbau:", self.candidate_format)
         write_layout.addLayout(form)
         self.findings = FindingsTable()
         self.findings.setMaximumHeight(120)
@@ -226,10 +229,13 @@ class ParametersPage(QWidget):
         if candidate is None:
             self.candidate_name.setText("–")
             self.candidate_sha.setText("–")
+            self.candidate_format.setText("–")
             self.findings.set_findings([])
             return
         self.candidate_name.setText(candidate.name)
         self.candidate_sha.setText(candidate.analysis.sha256[:32] + "…")
+        structure = candidate.structure
+        self.candidate_format.setText(structure.summary if structure else "Keine Parametergruppen erkannt")
         self.findings.set_findings(candidate.analysis.findings)
 
     def apply_gate(self, gate: ParameterWriteGate) -> None:
