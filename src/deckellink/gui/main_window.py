@@ -74,6 +74,7 @@ from deckellink.gui.pages.receive_page import ReceivePage
 from deckellink.gui.pages.settings_page import SettingsPage
 from deckellink.gui.pages.terminal_page import TerminalPage
 from deckellink.gui.pages.transfer_page import TransferPage
+from deckellink.gui.simulator_window import SimulatorWindow
 from deckellink.gui.style import StatusKind, apply_theme
 from deckellink.gui.viewmodels import (
     LoadedProgram,
@@ -188,6 +189,7 @@ class MainWindow(QMainWindow):
         self.param_archive = ParameterArchive(paths.root)
         self.commissioning_store = CommissioningStore(paths.root)
         self.commissioning_dialog: CommissioningDialog | None = None
+        self.simulator_windows: list[SimulatorWindow] = []
         self.commissioning_record: CommissioningRecord | None = None
         self.format_dialog: FormatDetectDialog | None = None
         self.param_unlocked = False  # session only, never persisted
@@ -374,6 +376,10 @@ class MainWindow(QMainWindow):
         wizard_action.triggered.connect(self.open_commissioning)
         format_action = self.tools_menu.addAction("&Datenformat ermitteln (nur Mitlesen) …")
         format_action.triggered.connect(self.open_format_detection)
+        self.tools_menu.addSeparator()
+        simulator_action = self.tools_menu.addAction("DIALOG-11-&Simulator (Grafik, offline) …")
+        simulator_action.setShortcut(QKeySequence("Ctrl+G"))
+        simulator_action.triggered.connect(lambda _checked=False: self.open_simulator())
 
         help_menu = bar.addMenu("&Hilfe")
         manual = help_menu.addAction("&Handbuch …")
@@ -1573,6 +1579,21 @@ class MainWindow(QMainWindow):
             return
         self._activate_profile(stored)
         self.statusBar().showMessage(f"Profil '{stored.display_name}' angelegt und aktiviert", 10000)
+
+    # ----------------------------------------------------------- DIALOG 11 simulator
+    def open_simulator(self) -> SimulatorWindow:
+        """Open the offline graphic simulator with the loaded program (or the demo program)."""
+        program = self.program
+        if program is not None:
+            text = program.original.decode("ascii", errors="replace")
+            window = SimulatorWindow(text, program.path.name, self)
+        else:
+            window = SimulatorWindow(None, "", self)
+        window.setWindowFlag(Qt.WindowType.Window, True)
+        window.show()
+        self.simulator_windows = [w for w in self.simulator_windows if w.isVisible()] + [window]
+        log.info("Simulator opened (%s)", program.path.name if program is not None else "demo program")
+        return window
 
     # ----------------------------------------------------------- commissioning assistant
     def open_commissioning(self) -> None:

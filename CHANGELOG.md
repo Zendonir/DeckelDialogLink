@@ -2,6 +2,16 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.6.0] – 2026-11-25
+
+**Der Simulator ist eine reine PC-Darstellung ohne Maschinenverbindung.** Seine Sprachbasis sind die DECKEL-Trainingsunterlagen zur DIALOG 11 (Module 3–14, nicht im Repository).
+
+### Hinzugefügt
+- **DIALOG-11-Simulator (Grafik, offline)** unter *Werkzeuge* (Strg+G): Interpreter für die DIALOG-11-Programmiersprache mit Grafik (XY, XZ, YZ, 3D) und einer Bedienung im Stil der Steuerung: Betriebsarten 1/2/3, Softkeys F1–F8, Start/Einzelsatz/Halt, Zeitleiste, Tempo 1×–1000×, Istwert/Restweg, Modalliste, Meldungen, Werkzeug-/Nullpunkt-/Parametertabellen, Befehlsübersicht und Demoprogramm.
+- Ausgewertet werden `G0` (Knickbahn, `G0.1`, `G0.2`), `G1`, `G2`/`G3` (Mittelpunkt, Radius, `G9` polar, Vollkreis, Schraubenlinie), Polarkoordinaten `PX PY PW PL`, `G17`–`G19`, `G40`–`G42` mit `G45`–`G47`, `G51`/`G53`–`G56` mit Drehung, `G58`, `G59`, Zyklen `G81`–`G86`, `G87.1`–`G87.5`, `G87.9`, `G89.1`/`G89.2`, Unterprogramme/Makros, `L`-Wiederholungen und -Sprünge, Parameter mit Rechenfunktionen, `P..!` und `IF … THEN … ELSE`.
+- Bearbeitete Programme lassen sich nur als **neue** Datei speichern; die Originaldatei bleibt unverändert.
+- Dokumentation `docs/SIMULATOR.md` mit allen Vereinfachungen. `docs/DIALOG11.md` ergänzt um die Angaben aus Modul 14 (KONFIG I/O mit bis zu 19200 Baud, DATEN-TRANSFER, Parallel-, Nachlade- und DNC-Betrieb).
+
 ## [0.5.1] – 2026-11-20
 
 **Nur gegen den Simulator getestet.** Grundlage der Änderungen ist eine echte Parameterausgabe einer FP2A (nicht im Repository enthalten).

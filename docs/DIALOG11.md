@@ -6,6 +6,19 @@
 
 Die DIALOG 11 besitzt eine serielle V.24/RS-232-Schnittstelle zur Programmübertragung. Steckerform, Pinbelegung und konkrete Parameter hängen von Ausstattung, Softwarestand und Maschinenparametern ab und sind hier **nicht** festgelegt (siehe [CABLE.md](CABLE.md)).
 
+### Angaben aus dem DECKEL-Trainingshandbuch (Modul 14 „Daten-Transfer", 1989)
+
+Die folgenden Punkte stammen aus den Schulungsunterlagen. Sie beschreiben die Bedienung an der Steuerung, nicht die Einstellungen einer bestimmten Maschine:
+
+- Die Schnittstelle lässt sich in der Unterbetriebsart **KONFIG I/O** für bis zu **7 Übertragungspartner** einstellen: Gerätenummer, Kanal, Bezeichnung, **Baudrate bis maximal 19200**, Datenbreite, Stoppbits, Parität, gegebenenfalls Übertragungsprotokoll und Partnerbezeichnung. Die Werte müssen im Partnergerät (also im DeckelLink-Profil) identisch eingestellt sein.
+- Ein- und Auslesen erfolgt in der Hilfsbetriebsart **DATEN-TRANSFER** (Hauptbetriebsart 3). Im Eingabefeld werden das Gerät und Filter gewählt (welche zugehörigen Dateien nicht übertragen werden), in der BEFEHLE-Zeile die Programmnummer. Gestartet wird mit der **START**-Taste an der Steuerung.
+- Übertragen werden Haupt- und Makroprogramme mit zugehörigen Dateien (Unterprogramme, Werkzeug- und Parameterdateien). Beim Einlesen wird das Programm unter der Nummer gespeichert, unter der es im Sendesystem archiviert war.
+- **Parallelbetrieb:** Die Steuerung kann im Hintergrund (Hauptbetriebsart 3) ein- oder auslesen, während sie in Hauptbetriebsart 2 ein Programm abarbeitet.
+- **Nachladebetrieb:** Nachladefunktion aktivieren (F3), EINLESEN wählen (F1) und starten (F8), dann in Hauptbetriebsart 2 das Programm anwählen (F5) und mit Zyklus-Start abarbeiten. Abgearbeitete Teile werden im Speicher gelöscht und „ratenweise" nachgeladen. Das deckt sich mit dem Grundsatz von DeckelLink: Der Start erfolgt immer an der CNC.
+- **DNC-Betrieb** (z. B. mit einem Programmierplatz): „DNC lokal" (Initiative beim Bediener an der Steuerung) und „DNC extern" (Initiative beim Rechner, Zugriff auf den Programmspeicher). DeckelLink bietet **keinen** DNC-extern-Zugriff auf den Programmspeicher an (siehe [SAFETY.md](SAFETY.md)).
+
+Das verwendete Übertragungsprotokoll (z. B. LSV2) und die konkreten Werte nennt das Handbuch nicht. Diese Punkte bleiben deshalb in der [Verifikations-Checkliste](VERIFICATION_CHECKLIST.md) offen.
+
 ## Widersprüchliche Angaben zu Datenformat und Handshake
 
 Öffentlich verfügbare Angaben (Foren, Erfahrungsberichte, Konfigurationen von DNC-Programmen) widersprechen sich. Häufig genannt werden u. a.:

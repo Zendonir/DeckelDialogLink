@@ -4,7 +4,7 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 
 | # | Punkt | Annahme / Standard in DeckelLink | Profilfeld | Ergebnis an realer FP2A |
 |---|---|---|---|---|
-| 1 | Tatsächliche Baudrate | 4800 (beide Profile) | `serial.baud_rate` | offen |
+| 1 | Tatsächliche Baudrate | 4800 (beide Profile); laut Trainingshandbuch an der Steuerung bis 19200 einstellbar (KONFIG I/O) | `serial.baud_rate` | offen (an der CNC unter KONFIG I/O ablesen) |
 | 2 | Datenbits | 7 | `serial.data_bits` | offen |
 | 3 | Parität | Profil A: keine · Profil B: gerade | `serial.parity` | offen |
 | 4 | Stoppbits | 1 | `serial.stop_bits` | offen |
@@ -23,7 +23,7 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 | 17 | Verhalten bei Sonderzeichen (Tab, `;`, Kommentare in Klammern, Kleinbuchstaben) | Tabs → Leerzeichen; `;`-Zeilen und Kommentare werden beibehalten (Warnung) | `transfer.tab_handling`, `skip_semicolon_lines`, `comment_handling` | offen |
 | 18 | Verhalten beim Empfang (Startbedienung an CNC, Pausen, Ende) | Ende per M30 + Zeilenende oder 5 s Inaktivität; Wartezeit auf erste Daten 120 s | `receive.*` | offen |
 | 19 | Verhalten beim Senden (Einlesebereitschaft, notwendige Start-/Endverzögerung, Zeichenverzögerung) | 1000 ms Start-/Endverzögerung, keine Zeichen-/Paketverzögerung | `transfer.start_delay_ms`, `end_delay_ms`, `character_delay_ms`, `packet_*` | offen |
-| 20 | Möglichkeit oder Unmöglichkeit von Drip-Feed (Nachladebetrieb) | über LSV2 implementiert, CNC-gesteuert über Quittungen | `protocol.*` | offen |
+| 20 | Möglichkeit oder Unmöglichkeit von Drip-Feed (Nachladebetrieb) | über LSV2 implementiert, CNC-gesteuert über Quittungen; Nachladebetrieb laut Trainingshandbuch vorhanden (F3/F1/F8, Start in Betriebsart 2) | `protocol.*` | teilweise (Funktion dokumentiert, Protokoll offen) |
 | 21 | Zeilenende, das die CNC beim Senden ausgibt | CRLF erwartet, andere werden normalisiert | `receive.normalize_line_endings` | offen |
 | 22 | Kommentarzeichen der Steuerung | `(` … `)` | `transfer.comment_open/close` | offen |
 | 23 | Unterstützt die DIALOG 11 LSV2 / DIN 66019 überhaupt, und in welchen Betriebsarten? | ja (Annahme, Profil C) | `protocol.mode` | offen |

@@ -124,6 +124,10 @@ Dateinamen: `RECEIVED_JJJJMMTT_HHMMSS.nc`, bei Konflikten `_001`, `_002` … Vor
 - Ungültige Profildateien führen nicht zum Absturz; die fehlerhaften Felder werden angezeigt, es wird auf ein sicheres Standardprofil zurückgefallen.
 - Unsichere Kombinationen (z. B. unbegrenzter Empfang, sehr kurze Timeouts, aktiviertes M30-Ergänzen, unbekannte Startsequenz) werden als Warnung angezeigt.
 
+## DIALOG-11-Simulator (Grafik, offline)
+
+**Werkzeuge → DIALOG-11-Simulator** (Strg+G) rechnet ein NC-Programm in der DIALOG-11-Sprache am PC durch und zeigt die Bahnen in Draufsicht, Vorder- und Seitenansicht sowie 3D. Zur Bedienung gehören die Betriebsarten Handfahren/Automatik/Programm, Softkeys F1–F8, Einzelsatz, Istwert- und Restweganzeige, Modalliste und Laufzeitschätzung. Ausgewertet werden Wegbefehle, Bahnkorrektur, Nullpunkte, Drehen/Spiegeln/Skalieren, Bohr-, Taschen- und Musterzyklen, Unterprogramme, Wiederholungen und Parameterprogrammierung. Der Simulator hat keine Verbindung zur Maschine. Details und Vereinfachungen: [docs/SIMULATOR.md](docs/SIMULATOR.md).
+
 ## Inbetriebnahme-Werkzeuge
 
 - **Werkzeuge → Inbetriebnahme-Assistent:** führt durch die Schritte aus [docs/COMMISSIONING.md](docs/COMMISSIONING.md), dokumentiert Status und Notizen, exportiert ein Protokoll und markiert das Profil erst nach allen Pflichtschritten als verifiziert.
@@ -152,7 +156,7 @@ mypy
 pytest --cov=deckellink
 ```
 
-Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 361 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
+Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 398 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
 
 ## Installation (Windows)
 

@@ -103,6 +103,7 @@ HELP_DOCUMENTS: tuple[HelpDocument, ...] = (
     HelpDocument("DIALOG11.md", "DIALOG 11 - bekannte/angenommene Eigenschaften"),
     HelpDocument("CABLE.md", "Kabel, Adapter, Netzwerkadapter"),
     HelpDocument("PARAMETERS.md", "Maschinenparameter"),
+    HelpDocument("SIMULATOR.md", "DIALOG-11-Simulator"),
     HelpDocument("TROUBLESHOOTING.md", "Fehlersuche"),
     HelpDocument("INSTALLATION.md", "Installation und Datenordner"),
     HelpDocument("ARCHITECTURE.md", "Technische Architektur"),

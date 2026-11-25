@@ -107,6 +107,21 @@ gui/dialogs/help_dialog.py     Handbuch (QTextBrowser rendert die mitgelieferten
 
 Die Seiten liegen in `QScrollArea`s, damit das Fenster auf kleinen Bildschirmen nutzbar bleibt. Das Design ist fest hell (Fusion + eigene Palette), die Schriftgröße skaliert über `build_stylesheet(scale)`.
 
+## DIALOG-11-Simulator (0.6)
+
+```
+dialog11sim/syntax.py       Zeilen, Teilsätze, Wörter, G-Varianten, Unterprogramm-Abschnitte
+dialog11sim/expressions.py  Parameter-Arithmetik (sicherer Parser, keine eval-Ausführung)
+dialog11sim/interpreter.py  Ablauf (Sprünge, Wiederholungen, Aufrufe), Modalzustand,
+                            Koordinatensysteme, Wege, Bahnkorrektur
+dialog11sim/cycles.py       G81-G86, G87.x, G89.x
+dialog11sim/geometry.py     Ebenen, Kreise, Transformation, Versatzbahn
+dialog11sim/playback.py     Zeitachse -> Position, Satz, Modalzustand (GUI-unabhängig)
+gui/simulator_window.py     Fenster (Rechnung in QThread), gui/widgets/toolpath_view.py Grafik
+```
+
+Der Simulator hat keine Abhängigkeit zu `transport/` oder `transfer/`. Er kann also technisch nichts an eine Maschine senden. Siehe [SIMULATOR.md](SIMULATOR.md).
+
 ## Abweichungen von der Vorgabestruktur
 
 | Vorgabe | Umsetzung | Grund |
