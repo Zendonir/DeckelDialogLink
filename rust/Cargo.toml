@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = ["crates/deckellink-core", "crates/deckellink-cli"]
+
+[workspace.package]
+version = "0.8.0-alpha.1"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+repository = "https://github.com/zendonir/deckeldialoglink"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+# Stability: no hidden panics in production code.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+indexing_slicing = "deny"
+exit = "deny"
+dbg_macro = "deny"
+print_stdout = "warn"
+float_cmp = "warn"
+
+[profile.release]
+overflow-checks = true
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+debug = "line-tables-only"
+
+[profile.dev]
+overflow-checks = true

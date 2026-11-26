@@ -2,6 +2,19 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.1] – 2026-11-26
+
+Beginn des Neubaus in Rust (Verzeichnis `rust/`, siehe `rust/README.md`). Die Python-Version bleibt die Anwendung mit Oberfläche.
+
+### Hinzugefügt
+- Kernbibliothek `deckellink-core` (Etappe 1). Enthält: Profile im gleichen JSON-Format mit derselben Prüfung und denselben Sicherheitshinweisen, NC-Prüfung und -Aufbereitung (EOT, M30/M2), Ports (seriell, TCP-Netzwerkadapter), simulierte CNC, Loopback, Senden und Empfangen.
+- Kommandozeile `deckellink-cli` (`check`, `prepare`, `ports`, `send`, `receive`). Reales Senden nur nach getippter Bestätigung `SENDEN`.
+- Stabilität: `unsafe` sowie `unwrap`/`panic`/ungeprüfte Indizes per Lint verboten, Überlaufprüfung auch im Release-Build, Eigenschaftstests mit Zufallsdaten, CI unter Linux und Windows (Windows-`.exe` als Artefakt).
+- Gleichwertigkeitstest `tools/rust_parity.py`: Python und Rust liefern für 3000 Zufallsfälle identische Ergebnisse.
+
+### Behoben (Python)
+- Meldung „Sehr große Datei“: Das Komma im Satz wurde fälschlich durch einen Punkt ersetzt („215 Bytes. Grenze …“). Gefunden durch den Gleichwertigkeitstest.
+
 ## [0.7.0] – 2026-11-26
 
 **Nur gegen den Simulator getestet.**

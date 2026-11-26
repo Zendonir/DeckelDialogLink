@@ -25,6 +25,11 @@ from deckellink.storage.checksums import sha256_bytes
 MAX_REPORTED_LINES = 200
 
 
+def _thousands(value: int) -> str:
+    """German thousands separator: 1234567 -> 1.234.567."""
+    return f"{value:,}".replace(",", ".")
+
+
 class _Collector:
     def __init__(self) -> None:
         self.findings: list[Finding] = []
@@ -76,9 +81,9 @@ def analyze(
         col.add(
             "FILE_TOO_LARGE",
             Severity.WARNING,
-            f"Sehr große Datei ({len(data):,} Bytes, Grenze laut Profil "
-            f"{settings.max_program_bytes:,} Bytes). Die Speicherkapazität der "
-            "Steuerung ist nicht verifiziert.".replace(",", "."),
+            f"Sehr große Datei ({_thousands(len(data))} Bytes, Grenze laut Profil "
+            f"{_thousands(settings.max_program_bytes)} Bytes). Die Speicherkapazität der "
+            "Steuerung ist nicht verifiziert.",
         )
 
     _check_bytes(data, lines, settings, serial, col)
