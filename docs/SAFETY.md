@@ -28,6 +28,8 @@ Programmstart, Achsbewegungen, Betriebsartenwahl oder ein frei beschreibbares Be
 | Original bleibt unverändert | Transformation erzeugt separate Daten |
 | Kein stilles Überschreiben | exklusives Anlegen, `_001`-Namensschema, Backup vor Ersetzen |
 | Abbruch jederzeit | Abbrechen-Knopf/Esc, kooperativ, Port wird kontrolliert geschlossen |
+| Werkzeugdateien | Kein erfundenes Format; Senden nur über die normale Bestätigung mit zusätzlichem Hinweis „Werkzeugdaten werden überschrieben“ bzw. „Vorlage nicht verifiziert“ |
+| Programmverwaltung | Versionen statt Überschreiben, Papierkorb statt Löschen; Senden/Nachladen nur über die Seite *Übertragen* |
 | DIALOG-11-Simulator (Grafik) | Rein lokale Berechnung ohne Zugriff auf Port oder Transport-Schicht; „Handfahren" bewegt nur das Werkzeug in der Grafik; gelbes SIMULATION-Band; Speichern nur als neue Datei |
 | Unvollständige Empfänge | Ablage in `failed/`, Kennzeichnung „UNVOLLSTÄNDIG" |
 | M30/M82 | nie automatisch; nur per Profil und ausdrücklicher Bestätigung |

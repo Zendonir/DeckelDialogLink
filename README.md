@@ -126,7 +126,11 @@ Dateinamen: `RECEIVED_JJJJMMTT_HHMMSS.nc`, bei Konflikten `_001`, `_002` … Vor
 
 ## DIALOG-11-Simulator (Grafik, offline)
 
-**Werkzeuge → DIALOG-11-Simulator** (Strg+G) rechnet ein NC-Programm in der DIALOG-11-Sprache am PC durch und zeigt die Bahnen in Draufsicht, Vorder- und Seitenansicht sowie 3D. Zur Bedienung gehören die Betriebsarten Handfahren/Automatik/Programm, Softkeys F1–F8, Einzelsatz, Istwert- und Restweganzeige, Modalliste und Laufzeitschätzung. Ausgewertet werden Wegbefehle, Bahnkorrektur, Nullpunkte, Drehen/Spiegeln/Skalieren, Bohr-, Taschen- und Musterzyklen, Unterprogramme, Wiederholungen und Parameterprogrammierung. Der Simulator hat keine Verbindung zur Maschine. Details und Vereinfachungen: [docs/SIMULATOR.md](docs/SIMULATOR.md).
+**Werkzeuge → DIALOG-11-Simulator** (Strg+G) rechnet ein NC-Programm in der DIALOG-11-Sprache am PC durch und zeigt die Bahnen in Draufsicht, Vorder- und Seitenansicht sowie 3D. Zur Bedienung gehören die Betriebsarten Handfahren/Automatik/Programm, Softkeys F1–F8, Einzelsatz, Istwert- und Restweganzeige, Modalliste und Laufzeitschätzung. Ausgewertet werden Wegbefehle, Bahnkorrektur, Nullpunkte, Drehen/Spiegeln/Skalieren, Bohr-, Taschen- und Musterzyklen, Unterprogramme, Wiederholungen und Parameterprogrammierung. Die Menüs der Steuerung (Haupt-, Unter- und Hilfsbetriebsarten mit Softkeys) sind nachgebildet. Der Simulator hat keine Verbindung zur Maschine. Details und Vereinfachungen: [docs/SIMULATOR.md](docs/SIMULATOR.md).
+
+## Programm- und Werkzeugverwaltung
+
+Die Seite **9 Programmverwaltung** verwaltet Programme, Makros und Werkzeugdateien mit Versionen, Papierkorb, Werkzeugprüfung und „zuletzt gesendet“. Die Werkzeugtabelle speist den Simulator. Aus der Verwaltung lässt sich direkt **zum Senden laden** oder der **Nachladebetrieb (LSV2)** starten – immer mit der üblichen Bestätigung. Ein Werkzeugdatei-Format der DIALOG 11 ist nicht bekannt: Von der Steuerung ausgelesene Werkzeugdateien können unverändert zurückgesendet werden, eigene Vorlagen sind als unverifiziert gekennzeichnet. Details: [docs/LIBRARY.md](docs/LIBRARY.md).
 
 ## Inbetriebnahme-Werkzeuge
 
@@ -156,7 +160,7 @@ mypy
 pytest --cov=deckellink
 ```
 
-Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 398 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
+Die Tests verwenden keine echten COM-Ports. Aktueller Stand: 416 Tests, Gesamtabdeckung ca. 91 % (Mindestgrenze 80 %).
 
 ## Installation (Windows)
 

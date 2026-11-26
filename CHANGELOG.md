@@ -2,6 +2,17 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.7.0] – 2026-11-26
+
+**Nur gegen den Simulator getestet.**
+
+### Hinzugefügt
+- **Steuerungsmenüs im Simulator nachgebildet:** Menüstruktur der DIALOG 11 mit Hauptbetriebsarten 1/2/3, Unterbetriebsarten (z. B. 21 TESTLAUF › 211 › 2117 START/STOP, 38 › 387 DATEN-TRANSFER), Hilfsbetriebsarten MODE, INFO, HELP (Menüstruktur), EDIT (Suchen/Ersetzen/Kopieren/Löschen/Schieben), GRAF und DIA (Dialogeingabe von Wegen und Zyklen). Dazu Bedienfeld ZYKLUS-START/STOP und EINZELSATZ, Menüpfad in der Betriebsartenanzeige, PRESET, FAHREN, SCHNITTDATEN-Rechner, Programmanwahl mit Satzvorlauf und Notizen. Nicht nachgebildete Maschinenfunktionen erscheinen grau mit Erklärung.
+- **Programm- und Werkzeugverwaltung** (Seite 9): Programme, Makros und Werkzeugdateien mit Versionen, Wiederherstellen, Papierkorb, Programmnummer, Werkzeugprüfung und „zuletzt gesendet“; Bearbeiten im Simulator mit Speichern als neue Version; Werkzeugtabelle (speist den Simulator) mit Sicherung; Werkzeugdatei aus Vorlage (als unverifiziert gekennzeichnet).
+- **Senden und Nachladebetrieb (LSV2) direkt aus der Programmverwaltung** – weiterhin mit Prüfung und Bestätigung; bei Werkzeugdateien zusätzliche Hinweise im Bestätigungsdialog.
+- **Übertragung mitverfolgen:** Ein geöffnetes Simulatorfenster zeigt beim Senden/Nachladen den übertragenen Stand (ausdrücklich nicht die Maschinenposition).
+- Dokumentation `docs/LIBRARY.md`, `docs/SIMULATOR.md` erweitert.
+
 ## [0.6.0] – 2026-11-25
 
 **Der Simulator ist eine reine PC-Darstellung ohne Maschinenverbindung.** Seine Sprachbasis sind die DECKEL-Trainingsunterlagen zur DIALOG 11 (Module 3–14, nicht im Repository).

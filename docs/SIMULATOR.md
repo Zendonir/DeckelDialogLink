@@ -12,31 +12,45 @@ Die Originaldatei wird nie verändert. Änderungen im Simulator lassen sich nur 
 
 ## Aufbau des Fensters
 
-Das Fenster ist an den Aufbau der DIALOG 11 angelehnt (Hauptbetriebsarten, Betriebsartenanzeige, Softkeyleiste F1–F8). Es ist eine eigene Darstellung, keine Nachbildung des Originalbildschirms.
+Das Fenster bildet die **Menüstruktur der DIALOG 11** nach (Haupt-, Unter- und Hilfsbetriebsarten mit Softkeys F1–F8, Struktur nach Modul 4 der Trainingsunterlagen). Die Grafik ist eine eigene Darstellung, keine Kopie des Originalbildschirms.
 
 | Bereich | Inhalt |
 |---|---|
 | Gelbes Band | Kennzeichnung **SIMULATION – keine Verbindung zur Maschine** |
-| Betriebsarten | **1 HANDFAHREN**, **2 AUTOMATIK**, **3 PROGRAMM**; daneben die Betriebsartenanzeige |
+| Betriebsarten | Hauptbetriebsart-Tasten **1 HANDFAHREN**, **2 AUTOMATIK**, **3 PROGRAMM**, Hilfsbetriebsarten **MODE INFO HELP EDIT GRAF DIA**, **◄ ZURÜCK**; daneben die Betriebsartenanzeige mit Menüpfad (z. B. `2 AUTOMATIK › 21 TESTLAUF › 211 TESTLAUF · EINZELSATZ`) |
 | links | Programmlisting; der aktuelle Satz ist gelb markiert |
 | Mitte | Grafik: Draufsicht XY, Vorderansicht XZ, Seitenansicht YZ, 3D-Ansicht |
 | rechts, *Anzeige* | Istwert (Werkstückkoordinaten), Restweg, F, S, Werkzeug, aktueller Satz, **Modalliste** |
 | rechts, *Meldungen* | Fehler, Warnungen und Hinweise der Simulation (Doppelklick springt zur Zeile) |
 | rechts, *Werkzeuge / Nullpunkte* | Werkzeugtabelle (Radius), Nullpunktspeicher G51.n, Parametertabelle, Eilgang-Annahme, Startposition |
 | rechts, *INFO G/M* | Übersicht der ausgewerteten Befehle |
-| unten | Zeitleiste, Laufzeit, Tempo (1× bis 1000×), Softkeys F1–F8 |
+| unten | Bedienfeld ZYKLUS-START, ZYKLUS-STOP, EINZELSATZ, ANFANG, ENDE; Zeitleiste, Laufzeit, Tempo (1× bis 1000×), „Übertragung mitverfolgen“; Softkeys F1–F8 des aktuellen Menüs |
 
 Grafik: Mausrad = Zoom, linke Maustaste = Verschieben, rechte Maustaste = Drehen (3D-Ansicht), Doppelklick = Einpassen. Farben: Vorschub hellblau, Eilgang orange gestrichelt, bereits bearbeitet grün, programmierte Kontur (ohne Bahnkorrektur) grau gepunktet, Werkzeug weiß (in der Draufsicht mit Radius).
 
-### Softkeys
+### Menüs und Softkeys
 
-| Betriebsart | F1 | F2 | F3 | F4 | F5 | F6 | F7 | F8 |
-|---|---|---|---|---|---|---|---|---|
-| 1 HANDFAHREN | X − | X + | Y − | Y + | Z − | Z + | Schrittweite | INFO |
-| 2 AUTOMATIK | Start (Folgesatz) | Einzelsatz | Halt | Anfang | Ende | Ansicht | Einpassen | INFO |
-| 3 PROGRAMM | Grafik neu | Demo | Datei öffnen | Speichern unter (neue Datei) | Prüfen | Ansicht | Einpassen | INFO |
+Die Softkey-Nummer entspricht der letzten Ziffer der Menünummer (z. B. 2117 = F7). **HELP › STRUKTUR** zeigt den kompletten Baum im Simulator.
+
+| Menü | Inhalt im Simulator |
+|---|---|
+| **1 HANDFAHREN** | 11 PRESET (Anzeige auf 0), 12 INKREMENT (X−/X+/Y−/Y+/Z−/Z+, Schrittweite), 13 FAHREN (Position eingeben), 16 SCHNITTDATEN (S und F aus vc, fz, z berechnen), 18 WEITER → 181 … 187 |
+| **2 AUTOMATIK** | 21 TESTLAUF → 211 TESTLAUF (2111 FOLGESATZ/EINZELSATZ, 2113 ECHTZEIT, 2115 ANWAHL VORLAUF, 2116 GRAFIK, 2117 START/STOP), 212/213 TESTLAUF MASCHINE (schnell), 25 ANWAHL VORLAUF (Programm aus der Programmverwaltung, Start ab Satz N), 26 GRAFIK, 28 WEITER |
+| **3 PROGRAMM** | 31 HAUPTPROGRAMM, 32 UNTERPROGRAMM, 33 MAKROPROGRAMM, 34 WERKZEUGE, 35 PARAMETER, 36 GRAFIK, 37 KONTUR, 38 WEITER → 381 PROGRAMM VERWALTEN, 382 MAKRO VERWALTEN, 383 WERKZEUGE ALLGEMEIN, 384 PARAMETER ALLGEMEIN, 385 NULLPUNKT, 386 NOTIZEN, 387 DATEN-TRANSFER (EINLESEN, AUSLESEN, NACHLADEN, KONFIG I/O, START) |
+| **MODE** | Text/Grafik, Grafik-Konfiguration (1 Ebene, 3 Ebenen, Drahtmodell, Drehen), Zoom, Fräser ein/aus, Eilgang ein/aus, Bild löschen |
+| **INFO** | Programm, Programmverwaltung, Notizen, Meldungen |
+| **HELP** | Menüstruktur, G-/M-Funktionen |
+| **EDIT** (in 3) | Suchen, Kopieren, Ersetzen, Löschen, Schieben (Ausschneiden), Einfügen |
+| **GRAF** | Umschalten Grafik ↔ Programmlisting |
+| **DIA** | Dialog-Eingabe: G0, G1, G2, G3, Bohr-, Fräs- und Musterzyklen; der Satz wird mit Satznummer hinter der Cursorzeile eingefügt |
+
+Maschinenfunktionen ohne Gegenstück im Simulator (Referenzpunkt, Werkzeug-/Palettenwechsler, Schmieren, Digitalisieren, Achsenwechsel, Werkzeugmagazin) erscheinen grau und zeigen nur eine Erklärung. Menünummern, die in den Unterlagen nicht lesbar waren (24, 35, 36, 37 sowie die Untermenüs von 12 und 387), sind abgeleitet und im Tooltip so gekennzeichnet.
 
 *Handfahren* bewegt nur das Werkzeug **im Simulator** (die Spur wird violett gezeichnet). In *Programm* wird nach jeder Änderung neu gerechnet. In *Automatik* setzt ein Klick in das Listing die Zeitleiste auf diesen Satz.
+
+### Übertragung mitverfolgen
+
+Wird ein Programm, das im Simulator geöffnet ist, über DeckelLink gesendet oder im **Nachladebetrieb (LSV2)** übertragen, zeigt der Simulator den bisher **übertragenen** Stand an („ÜBERTRAGEN BIS ZEILE n“). Das ist der Übertragungsstand von DeckelLink, **nicht** die Position der Maschine. Gerade im Nachladebetrieb puffert die Steuerung Sätze vor.
 
 ## Ausgewertete Programmiersprache
 

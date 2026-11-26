@@ -99,6 +99,15 @@ class Playback:
             index += 1
         return self.time_of_move_end(index)
 
+    def time_until_line(self, line: int) -> float:
+        """End of the last move before the program first moves past ``line`` (transfer follow-up)."""
+        reached = 0.0
+        for index, move in enumerate(self.result.moves):
+            if move.line > line:
+                break
+            reached = self.time_of_move_end(index)
+        return reached
+
     def time_of_line(self, line: int) -> float | None:
         for index, move in enumerate(self.result.moves):
             if move.line == line:

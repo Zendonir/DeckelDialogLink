@@ -44,6 +44,7 @@ Alle Punkte sind **offen**. DeckelLink wurde bisher ausschließlich gegen den Si
 | 38 | Akzeptiert die Steuerung eine vollständige Parameterdatei oder nur Teilmengen? | vollständige Datei | – | offen |
 | 39 | Verhalten der Steuerung bei fehlerhafter oder abgebrochener Parametereingabe | unbekannt | – | offen |
 | 40 | Gleiche Schnittstellenparameter/Protokoll wie für NC-Programme? | ja (gleiches Profil) | `serial.*`, `protocol.*` | offen |
+| 44 | Format der Werkzeugdatei der DIALOG 11 (Ein-/Ausgabe über Daten-Transfer) | unbekannt – nur unverändertes Zurücksenden empfangener Dateien bzw. Vorlage (unverifiziert) | Vorlage in der Werkzeugverwaltung | offen |
 | 42 | Prüfsummenverfahren der Parametergruppen | unbekannt – wird nie berechnet; geänderte Gruppe mit alter Prüfsumme wird nicht geschrieben | – | offen |
 | 43 | Lehnt die Steuerung Parameterdateien eines anderen Softwarestands ab bzw. ist das gefährlich? | Schreiben nur bei gleichem Softwarestand und gleicher Maschinennummer wie die Sicherung | – | offen |
 | 41 | Betrieb über RS-232/Ethernet-Adapter: Modell, Modus (TCP-Server/RFC 2217), Adapter-Einstellungen, Handshake im Adapter | nur gegen lokalen TCP-Testserver geprüft | Einstellungen → Verbindungsart | offen |

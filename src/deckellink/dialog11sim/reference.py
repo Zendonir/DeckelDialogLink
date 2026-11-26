@@ -29,6 +29,7 @@ N220 P1 = (P1 + 1)
 N230 IF P1 < 5 THEN L0 N190
 N240 G53
 N250 G0 X-35 Y-15
+N255 P2 = %*1
 N260 G89.1 LL4 LY10 P2
 N270 G0 Z100
 N280 M30
@@ -36,7 +37,7 @@ N280 M30
 N10 G81 OA0 TI5 SI2 EA5
 """
 
-DEMO_PARAMETERS = {"P2": "%*1"}
+DEMO_PARAMETERS: dict[str, str] = {}
 
 # (command, meaning, simulator support)
 FUNCTION_REFERENCE: tuple[tuple[str, str, str], ...] = (

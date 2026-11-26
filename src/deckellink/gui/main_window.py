@@ -48,6 +48,7 @@ from deckellink.diagnostics.format_detect import (
 )
 from deckellink.diagnostics.loopback_test import LoopbackPattern, LoopbackVerdict, make_pattern, run_loopback_test
 from deckellink.diagnostics.terminal import TerminalBuffer, TrafficFileLogger
+from deckellink.dialog11sim.model import ToolData
 from deckellink.domain.errors import ProfileValidationError, UserFacingError
 from deckellink.domain.models import Parity, Profile, VerificationStatus
 from deckellink.domain.results import (
@@ -67,6 +68,7 @@ from deckellink.gui.dialogs.help_dialog import HelpDialog, show_about
 from deckellink.gui.dialogs.loopback_dialog import LoopbackDialog
 from deckellink.gui.dialogs.parameter_write_dialog import ParameterWriteInfo, ask_parameter_write
 from deckellink.gui.pages.diagnostics_page import DiagnosticsPage
+from deckellink.gui.pages.library_page import LibraryPage
 from deckellink.gui.pages.log_page import LogPage, QtLogHandler
 from deckellink.gui.pages.parameters_page import ParametersPage
 from deckellink.gui.pages.programs_page import ProgramsPage
@@ -85,6 +87,7 @@ from deckellink.gui.widgets.header import HeaderBar
 from deckellink.gui.workers import Job, TaskCallbacks, TaskHandle
 from deckellink.logging.setup import set_level
 from deckellink.nc.analyzer import analyze
+from deckellink.nc.linemap import map_payload_lines
 from deckellink.nc.transformer import TransformError, transform
 from deckellink.parameters.archive import ParameterArchive, StoredParameterSet
 from deckellink.parameters.service import (
@@ -115,7 +118,9 @@ from deckellink.simulation.scenarios import (
 from deckellink.storage.archive import ReceiveArchive, StoredReceive, export_copy
 from deckellink.storage.backup import BackupManager
 from deckellink.storage.files import sanitize_stem, unique_path, write_new_file
+from deckellink.storage.library import EntryKind, LibraryError, ProgramLibrary
 from deckellink.storage.paths import AppPaths
+from deckellink.storage.tooldb import ToolDatabase, ToolExportTemplate
 from deckellink.transfer.cancellation import CancellationToken
 from deckellink.transfer.lsv2_transfer import Lsv2ProgramReceiver, Lsv2ProgramSender
 from deckellink.transfer.receiver import ProgramReceiver, ReceiveCallbacks, process_received
@@ -138,6 +143,7 @@ NAV_ITEMS = (
     "Diagnose",
     "Einstellungen",
     "Protokoll",
+    "Programmverwaltung",
 )
 NC_FILE_FILTER = "NC-Programme (*.nc *.NC *.txt *.TXT *.mpf *.MPF *.din *.DIN);;Alle Dateien (*)"
 
@@ -190,6 +196,10 @@ class MainWindow(QMainWindow):
         self.commissioning_store = CommissioningStore(paths.root)
         self.commissioning_dialog: CommissioningDialog | None = None
         self.simulator_windows: list[SimulatorWindow] = []
+        self.library = ProgramLibrary(paths.root / "library")
+        self.tool_db = ToolDatabase(paths.root / "tools.json", self.backups)
+        self._send_line_map: list[int] = []
+        self._sending_path: Path | None = None
         self.commissioning_record: CommissioningRecord | None = None
         self.format_dialog: FormatDetectDialog | None = None
         self.param_unlocked = False  # session only, never persisted
@@ -268,6 +278,13 @@ class MainWindow(QMainWindow):
         self.diagnostics_page = DiagnosticsPage()
         self.settings_page = SettingsPage()
         self.log_page = LogPage()
+        self.library_page = LibraryPage(
+            self.library,
+            self.tool_db,
+            ToolExportTemplate(
+                self.config.tool_export_header, self.config.tool_export_line, self.config.tool_export_footer
+            ),
+        )
         for page in (
             self.transfer_page,
             self.receive_page,
@@ -277,6 +294,7 @@ class MainWindow(QMainWindow):
             self.diagnostics_page,
             self.settings_page,
             self.log_page,
+            self.library_page,
         ):
             self.stack.addWidget(self._scrollable(page))
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
@@ -303,6 +321,12 @@ class MainWindow(QMainWindow):
         pp.open_folder_requested.connect(lambda: self._open_folder(self.paths.received))
         pp.export_requested.connect(self.export_program)
         pp.load_for_send_requested.connect(self.load_for_send)
+
+        lp = self.library_page
+        lp.send_requested.connect(self.send_library_entry)
+        lp.simulate_requested.connect(self.simulate_library_entry)
+        lp.template_changed.connect(self._tool_template_changed)
+        lp.open_folder_requested.connect(self._open_folder)
 
         mp = self.parameters_page
         mp.read_requested.connect(self.start_parameter_read)
@@ -380,6 +404,8 @@ class MainWindow(QMainWindow):
         simulator_action = self.tools_menu.addAction("DIALOG-11-&Simulator (Grafik, offline) …")
         simulator_action.setShortcut(QKeySequence("Ctrl+G"))
         simulator_action.triggered.connect(lambda _checked=False: self.open_simulator())
+        library_action = self.tools_menu.addAction("&Programm- und Werkzeugverwaltung")
+        library_action.triggered.connect(lambda: self.nav.setCurrentRow(len(NAV_ITEMS) - 1))
 
         help_menu = bar.addMenu("&Hilfe")
         manual = help_menu.addAction("&Handbuch …")
@@ -865,7 +891,7 @@ class MainWindow(QMainWindow):
             profile_verified=profile.verification_status is VerificationStatus.VERIFIED,
             port=self.port_label,
             serial_summary=profile.serial.summary,
-            warnings=tuple(f.message for f in program.analysis.warnings),
+            warnings=tuple(f.message for f in program.analysis.warnings) + self._library_send_notes(program.path),
             applied=payload.applied,
             show_safety_notice=self.config.show_safety_notice,
             appended_program_end=payload.appended_program_end,
@@ -898,6 +924,8 @@ class MainWindow(QMainWindow):
         self.transfer_page.reset_progress()
 
         program_name = program.path.stem
+        self._send_line_map = map_payload_lines(program.original, payload.data)
+        self._sending_path = program.path
 
         def job(cb: TaskCallbacks, token: CancellationToken) -> object:
             callbacks = SendCallbacks(
@@ -939,6 +967,17 @@ class MainWindow(QMainWindow):
 
     def _send_progress(self, progress: TransferProgress) -> None:
         self.transfer_page.set_progress(progress)
+        self._follow_in_simulators(progress)
+
+    def _follow_in_simulators(self, progress: TransferProgress) -> None:
+        """Show the transmitted state in open simulator windows of the same file (display only)."""
+        if self._sending_path is None or not self._send_line_map:
+            return
+        index = min(max(progress.current_line, 1), len(self._send_line_map)) - 1
+        line = self._send_line_map[index]
+        for window in self.simulator_windows:
+            if window.isVisible() and window.follow_path == self._sending_path:
+                window.follow_transfer(line)
 
     def _send_finished(self, payload: tuple[SendResult, Transport]) -> None:
         result, transport = payload
@@ -955,6 +994,8 @@ class MainWindow(QMainWindow):
             SendState.FAILED: "Übertragung fehlgeschlagen - siehe Meldung",
         }
         self.statusBar().showMessage(messages.get(result.state, result.state.label), 10000)
+        if result.state is SendState.COMPLETED and self._sending_path is not None:
+            self._mark_library_sent(self._sending_path, simulated=result.simulated)
 
     # ----------------------------------------------------------- receive
     def start_receive(self) -> None:
@@ -1581,19 +1622,93 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Profil '{stored.display_name}' angelegt und aktiviert", 10000)
 
     # ----------------------------------------------------------- DIALOG 11 simulator
-    def open_simulator(self) -> SimulatorWindow:
-        """Open the offline graphic simulator with the loaded program (or the demo program)."""
+    def open_simulator(
+        self,
+        path: Path | None = None,
+        *,
+        name: str = "",
+        save_callback: Callable[[bytes], str] | None = None,
+        edit: bool = False,
+    ) -> SimulatorWindow:
+        """Open the offline graphic simulator (file, loaded program or demo program)."""
         program = self.program
-        if program is not None:
+        text: str | None = None
+        follow: Path | None = None
+        if path is not None:
+            text = path.read_bytes().decode("ascii", errors="replace")
+            follow = path
+            name = name or path.name
+        elif program is not None:
             text = program.original.decode("ascii", errors="replace")
-            window = SimulatorWindow(text, program.path.name, self)
-        else:
-            window = SimulatorWindow(None, "", self)
+            follow = program.path
+            name = program.path.name
+        tools = {t.number: ToolData(radius=t.radius, length=t.length, name=t.name) for t in self.tool_db.load()}
+        window = SimulatorWindow(
+            text, name, self, tools=tools, library=self.library, save_callback=save_callback, follow_path=follow
+        )
         window.setWindowFlag(Qt.WindowType.Window, True)
         window.show()
+        if edit:
+            window.set_mode(3)
         self.simulator_windows = [w for w in self.simulator_windows if w.isVisible()] + [window]
-        log.info("Simulator opened (%s)", program.path.name if program is not None else "demo program")
+        log.info("Simulator opened (%s)", name or "demo program")
         return window
+
+    # ----------------------------------------------------------- program management
+    def send_library_entry(self, entry_id: str, drip_feed: bool) -> None:
+        """Load a library entry on the "Übertragen" page; sending still needs the normal confirmation."""
+        entry = self.library.get(entry_id)
+        if entry is None or self.busy:
+            return
+        self.load_file(entry.path)
+        self.nav.setCurrentRow(0)
+        if drip_feed:
+            if self.program is None or self.program.payload is None:
+                self.statusBar().showMessage("Nachladebetrieb nicht möglich: Datei hat Prüffehler", 8000)
+                return
+            self.start_drip_feed()
+
+    def simulate_library_entry(self, entry_id: str, edit: bool) -> SimulatorWindow | None:
+        entry = self.library.get(entry_id)
+        if entry is None:
+            return None
+
+        def save(data: bytes) -> str:
+            return self.library_page.save_content(entry_id, data)
+
+        return self.open_simulator(entry.path, name=entry.name, save_callback=save if edit else None, edit=edit)
+
+    def _library_send_notes(self, path: Path) -> tuple[str, ...]:
+        if path.parent != self.library.root:
+            return ()
+        entry = self.library.get(path.stem)
+        if entry is None or entry.kind is not EntryKind.TOOLS:
+            return ()
+        notes = [
+            "WERKZEUGDATEI: Beim Einlesen an der Steuerung werden Werkzeugdaten (Längen, Radien) überschrieben. "
+            "Werte vor der Bearbeitung an der Maschine kontrollieren."
+        ]
+        if "Vorlage" in entry.source:
+            notes.append("Diese Werkzeugdatei wurde aus einer Vorlage erzeugt - das Format ist NICHT verifiziert.")
+        return tuple(notes)
+
+    def _mark_library_sent(self, path: Path, *, simulated: bool) -> None:
+        if path.parent != self.library.root:
+            return
+        entry = self.library.get(path.stem)
+        if entry is None:
+            return
+        try:
+            self.library.mark_sent(entry, now=datetime.now().astimezone(), mode="Simulator" if simulated else "real")
+        except (LibraryError, OSError) as exc:
+            log.warning("Library: could not record send time: %s", exc)
+        self.library_page.refresh(entry.id)
+
+    def _tool_template_changed(self, template: ToolExportTemplate) -> None:
+        self.config.tool_export_header = template.header
+        self.config.tool_export_line = template.line
+        self.config.tool_export_footer = template.footer
+        self._save_config()
 
     # ----------------------------------------------------------- commissioning assistant
     def open_commissioning(self) -> None:

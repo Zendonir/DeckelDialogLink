@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QShortcut, QTextCursor, QTextFormat
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -17,6 +19,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -38,12 +41,15 @@ from PySide6.QtWidgets import (
 
 from deckellink.dialog11sim.geometry import Vec3
 from deckellink.dialog11sim.interpreter import simulate
+from deckellink.dialog11sim.menus import AUX_MODES, BACK, MAIN_MODES, NOT_SIMULATED, MenuItem, structure_text
 from deckellink.dialog11sim.model import Severity, SimConfig, SimResult, ToolData
 from deckellink.dialog11sim.playback import Frame, Playback, format_duration
 from deckellink.dialog11sim.reference import DEMO_PARAMETERS, DEMO_PROGRAM, FUNCTION_REFERENCE
+from deckellink.gui.simulator_dialogs import CuttingDataDialog, DiaDialog, SelectProgramDialog
 from deckellink.gui.style import SIMULATION_BANNER_STYLE
 from deckellink.gui.widgets.toolpath_view import ToolpathView
 from deckellink.storage.files import FileExistsConflict, write_new_file
+from deckellink.storage.library import EntryKind, ProgramLibrary
 
 log = logging.getLogger(__name__)
 
@@ -61,11 +67,10 @@ JOG_STEPS = ("0.01", "0.1", "1", "10", "100")
 MONO = QFont("Consolas")
 MONO.setStyleHint(QFont.StyleHint.Monospace)
 
-SOFTKEYS: dict[int, tuple[str, ...]] = {
-    1: ("X −", "X +", "Y −", "Y +", "Z −", "Z +", "SCHRITT", "INFO"),
-    2: ("START", "EINZELSATZ", "HALT", "ANFANG", "ENDE", "ANSICHT", "EINPASSEN", "INFO"),
-    3: ("GRAFIK\nNEU", "DEMO", "DATEI\nÖFFNEN", "SPEICHERN\nUNTER", "PRÜFEN", "ANSICHT", "EINPASSEN", "INFO"),
-}
+SCREEN_TAB = 5
+NOTES_TAB = 4
+SOFTKEY_STYLE = "font-weight:bold;"
+SOFTKEY_OFF_STYLE = "font-weight:bold;color:#868e96;font-style:italic;"
 MODE_NAMES = {1: "1 HANDFAHREN", 2: "2 AUTOMATIK", 3: "3 PROGRAMM"}
 
 
@@ -96,8 +101,32 @@ class SimulatorWindow(QMainWindow):
 
     simulation_finished = Signal()
 
-    def __init__(self, text: str | None = None, name: str = "", parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        text: str | None = None,
+        name: str = "",
+        parent: QWidget | None = None,
+        *,
+        tools: dict[int, ToolData] | None = None,
+        library: ProgramLibrary | None = None,
+        save_callback: Callable[[bytes], str] | None = None,
+        follow_path: Path | None = None,
+    ) -> None:
         super().__init__(parent)
+        self.tools = dict(tools or {})
+        self.library = library
+        self.save_callback = save_callback
+        self.follow_path = follow_path
+        self.menu_stack: list[MenuItem] = [MAIN_MODES[2]]
+        self.single_block_mode = False
+        self.realtime = False
+        self.graphics_on = True
+        self.contour_on = False
+        self.dripfeed_on = False
+        self.show_tool = True
+        self.preset_offset: Vec3 = (0.0, 0.0, 0.0)
+        self.follow_line: int | None = None
+        self.pending_start_block: int | None = None
         self.setWindowTitle("DeckelLink - DIALOG-11-Simulator (offline)")
         self.resize(1360, 860)
         self.mode = 2
@@ -146,6 +175,18 @@ class SimulatorWindow(QMainWindow):
             self.mode_buttons[number] = button
             top.addWidget(button)
         self.mode_group.idClicked.connect(self.set_mode)
+        self.aux_buttons: dict[str, QPushButton] = {}
+        for code in AUX_MODES:
+            button = QPushButton(code)
+            button.setMinimumHeight(34)
+            button.setToolTip(AUX_MODES[code].description)
+            button.clicked.connect(lambda _c=False, c=code: self.aux_mode(c))
+            self.aux_buttons[code] = button
+            top.addWidget(button)
+        self.back_button = QPushButton("◄ ZURÜCK")
+        self.back_button.setMinimumHeight(34)
+        self.back_button.clicked.connect(self.menu_back)
+        top.addWidget(self.back_button)
         self.mode_display = QLabel()
         self.mode_display.setStyleSheet(
             "background:#0f1b2d;color:#ffd43b;font-weight:bold;padding:6px 10px;border:1px solid #495057;"
@@ -159,7 +200,21 @@ class SimulatorWindow(QMainWindow):
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         self.listing_label = QLabel()
+        self.listing_label.setWordWrap(True)
         left_layout.addWidget(self.listing_label)
+        file_row = QHBoxLayout()
+        self.open_button = QPushButton("Datei öffnen …")
+        self.open_button.clicked.connect(self.open_file)
+        self.save_as_button = QPushButton("Als neue Datei …")
+        self.save_as_button.clicked.connect(self.save_as)
+        self.save_library_button = QPushButton("In Programmverwaltung speichern")
+        self.save_library_button.setVisible(self.save_callback is not None)
+        self.save_library_button.clicked.connect(self.save_to_library)
+        self.demo_button = QPushButton("Demo")
+        self.demo_button.clicked.connect(self.load_demo)
+        for button in (self.open_button, self.save_as_button, self.save_library_button, self.demo_button):
+            file_row.addWidget(button)
+        left_layout.addLayout(file_row)
         self.editor = QPlainTextEdit()
         self.editor.setFont(MONO)
         self.editor.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -196,12 +251,34 @@ class SimulatorWindow(QMainWindow):
         self.tabs.addTab(self.messages, "Meldungen")
         self.tabs.addTab(self._build_setup_tab(), "Werkzeuge / Nullpunkte")
         self.tabs.addTab(self._build_info_tab(), "INFO G/M")
+        self.notes_edit = QPlainTextEdit()
+        self.notes_edit.setPlaceholderText("Notizen (nur in diesem Simulatorfenster, werden nicht gespeichert)")
+        self.tabs.addTab(self.notes_edit, "Notizen")
+        self.screen_text = QPlainTextEdit()
+        self.screen_text.setReadOnly(True)
+        self.screen_text.setFont(MONO)
+        self.tabs.addTab(self.screen_text, "Bildschirm")
         splitter.addWidget(self.tabs)
         splitter.setSizes([360, 620, 380])
+        self.splitter = splitter
         root.addWidget(splitter, 1)
 
-        # playback row
+        # machine panel keys and playback row
         play = QHBoxLayout()
+        panel = (
+            ("▶ ZYKLUS-START", self.start, "Testlauf starten (Folgesatz bzw. Einzelsatz)"),
+            ("■ ZYKLUS-STOP", self.pause, "Anhalten"),
+            ("EINZELSATZ", self.single_block, "Nächsten Satz ausführen"),
+            ("⏮ ANFANG", self.rewind, "Zurück an den Programmanfang"),
+            ("⏭ ENDE", self.to_end, "Ans Programmende"),
+        )
+        self.panel_buttons: list[QPushButton] = []
+        for text, slot, tip in panel:
+            button = QPushButton(text)
+            button.setToolTip(tip)
+            button.clicked.connect(slot)
+            play.addWidget(button)
+            self.panel_buttons.append(button)
         self.time_slider = QSlider(Qt.Orientation.Horizontal)
         self.time_slider.setRange(0, 1000)
         self.time_slider.sliderMoved.connect(self._slider_moved)
@@ -220,6 +297,14 @@ class SimulatorWindow(QMainWindow):
         self.jog_step.setCurrentIndex(3)
         play.addWidget(QLabel("Schritt (mm):"))
         play.addWidget(self.jog_step)
+        self.follow_box = QCheckBox("Übertragung mitverfolgen")
+        self.follow_box.setToolTip(
+            "Zeigt bei einer laufenden Übertragung dieses Programms (Senden/Nachladebetrieb) den bisher "
+            "übertragenen Stand. Das ist der Übertragungsstand, NICHT die Position der Maschine."
+        )
+        self.follow_box.setChecked(self.follow_path is not None)
+        self.follow_box.setVisible(self.follow_path is not None)
+        play.addWidget(self.follow_box)
         root.addLayout(play)
 
         # softkeys F1..F8
@@ -227,8 +312,8 @@ class SimulatorWindow(QMainWindow):
         self.softkeys: list[QPushButton] = []
         for index in range(8):
             button = QPushButton()
-            button.setMinimumHeight(50)
-            button.setStyleSheet("font-weight:bold;")
+            button.setMinimumHeight(64)
+            button.setStyleSheet(SOFTKEY_STYLE)
             button.clicked.connect(lambda _c=False, i=index: self.softkey(i + 1))
             keys.addWidget(button)
             self.softkeys.append(button)
@@ -283,12 +368,18 @@ class SimulatorWindow(QMainWindow):
     def _build_setup_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.addWidget(QLabel("Werkzeugtabelle des Simulators (Radius für Bahnkorrektur und Zyklen):"))
-        self.tool_table = QTableWidget(8, 3)
+        layout.addWidget(
+            QLabel(
+                "Werkzeugtabelle des Simulators (Radius für Bahnkorrektur und Zyklen)"
+                + (" - übernommen aus der Werkzeugverwaltung:" if self.tools else ":")
+            )
+        )
+        rows = [(n, t.radius, t.length) for n, t in sorted(self.tools.items())] or [(n, 5.0, 0.0) for n in range(1, 9)]
+        self.tool_table = QTableWidget(len(rows) + 4, 3)
         self.tool_table.setHorizontalHeaderLabels(["T-Nr.", "Radius mm", "Länge mm"])
         self.tool_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        for row in range(8):
-            for col, value in enumerate((str(row + 1), "5", "0")):
+        for row, (number, radius, length) in enumerate(rows):
+            for col, value in enumerate((str(number), f"{radius:g}", f"{length:g}")):
                 self.tool_table.setItem(row, col, QTableWidgetItem(value))
         layout.addWidget(self.tool_table)
         layout.addWidget(QLabel("Nullpunktspeicher G51.n (Werte relativ zu G51.0):"))
@@ -422,6 +513,9 @@ class SimulatorWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Simulation fertig: {len(result.moves)} Bewegungen, {errors} Fehler, {warnings} Warnungen"
         )
+        if self.pending_start_block is not None:
+            number, self.pending_start_block = self.pending_start_block, None
+            self.apply_start_block(number)
         self._show_frame()
         self.simulation_finished.emit()
 
@@ -440,22 +534,26 @@ class SimulatorWindow(QMainWindow):
         if self.mode == 3:
             self.edit_timer.start()
 
-    # ------------------------------------------------------------------ modes and softkeys
+    # ------------------------------------------------------------------ modes and menus
+    @property
+    def menu(self) -> MenuItem:
+        return self.menu_stack[-1]
+
     def set_mode(self, mode: int) -> None:
+        """Main mode key 1/2/3: opens the main menu of that mode."""
         self.mode = mode
         self.mode_buttons[mode].setChecked(True)
+        self.menu_stack = [MAIN_MODES[mode]]
         self.pause()
         self.editor.setReadOnly(mode != 3)
         self.listing_label.setText(
             {
-                1: "Handfahren: Achsen des Simulators mit F1-F6 verfahren (keine Maschine!)",
-                2: "Programm (Automatik/Testlauf) - aktueller Satz ist markiert",
+                1: "Handfahren: Achsen nur im Simulator verfahren (12 INKREMENT, 13 FAHREN) - keine Maschine!",
+                2: "Automatik/Testlauf - aktueller Satz ist markiert. Start/Stopp/Einzelsatz über die Tasten unten.",
                 3: "Programm bearbeiten - die Grafik wird nach Änderungen neu berechnet. "
                 "Die Originaldatei bleibt unverändert.",
             }[mode]
         )
-        for index, label in enumerate(SOFTKEYS[mode]):
-            self.softkeys[index].setText(f"F{index + 1}\n{label}")
         self.jog_step.setEnabled(mode == 1)
         if mode == 1:
             frame = self._current_frame()
@@ -464,77 +562,424 @@ class SimulatorWindow(QMainWindow):
             self.view.set_tool(self.manual_position, self.view.tool_radius, self.view.done_moves)
         else:
             self.view.manual_trace = []
-        self._update_mode_display()
+        self._refresh_menu()
         self._show_frame()
 
+    def aux_mode(self, code: str) -> None:
+        """Auxiliary mode key (MODE, INFO, HELP, EDIT, GRAF, DIA)."""
+        item = AUX_MODES[code]
+        if not item.is_menu:
+            self.run_action(item.action, item)
+            return
+        self.menu_stack = [self.menu_stack[0], item]
+        self._refresh_menu()
+
+    def menu_back(self) -> None:
+        if len(self.menu_stack) > 1:
+            self.menu_stack.pop()
+        self._refresh_menu()
+
+    def _refresh_menu(self) -> None:
+        for index, item in enumerate(self.menu.slots()):
+            button = self.softkeys[index]
+            if item is None:
+                button.setText(f"F{index + 1}")
+                button.setEnabled(False)
+                button.setToolTip("")
+                button.setStyleSheet(SOFTKEY_STYLE)
+                continue
+            code = f"{item.code} " if item.code and item.code not in AUX_MODES else ""
+            button.setText(f"F{index + 1}  {code}\n{item.label}")
+            button.setEnabled(True)
+            tip = item.description + ("" if item.available else f" - {NOT_SIMULATED}")
+            button.setToolTip(tip + (" (Menünummer abgeleitet)" if item.assumed else ""))
+            button.setStyleSheet(SOFTKEY_STYLE if item.available else SOFTKEY_OFF_STYLE)
+        self.back_button.setEnabled(len(self.menu_stack) > 1)
+        self._update_mode_display()
+
     def _update_mode_display(self) -> None:
-        state = "LÄUFT" if self.running else "HALT"
-        extra = {1: f"Schritt {self.jog_step.currentText()} mm", 2: f"TESTLAUF {state}", 3: "EDITIEREN"}[self.mode]
-        self.mode_display.setText(f"{MODE_NAMES[self.mode]}  ·  {extra}  ·  GRAFIK EIN  ·  SIMULATION")
+        if not hasattr(self, "mode_display"):
+            return
+        path = " › ".join(item.title for item in self.menu_stack)
+        flags = []
+        if self.mode == 2:
+            flags.append("TESTLAUF LÄUFT" if self.running else "TESTLAUF HALT")
+            flags.append("EINZELSATZ" if self.single_block_mode else "FOLGESATZ")
+            if self.realtime:
+                flags.append("ECHTZEIT")
+        if self.mode == 1:
+            flags.append(f"Schritt {self.jog_step.currentText()} mm")
+        flags.append("GRAFIK EIN" if self.graphics_on else "GRAFIK AUS")
+        if self.contour_on:
+            flags.append("KONTUR EIN")
+        if self.dripfeed_on:
+            flags.append("NACHLADEN")
+        if self.follow_line is not None:
+            flags.append(f"ÜBERTRAGEN BIS ZEILE {self.follow_line}")
+        self.mode_display.setText(f"{path}  ·  {'  ·  '.join(flags)}  ·  SIMULATION")
 
     def softkey(self, number: int) -> None:
-        if self.mode == 1:
-            self._softkey_manual(number)
-        elif self.mode == 2:
-            self._softkey_auto(number)
-        else:
-            self._softkey_program(number)
+        item = self.menu.slots()[number - 1] if 1 <= number <= 8 else None
+        if item is None:
+            return
+        if not item.available:
+            self.show_screen(f"{item.title}\n\n{item.description}\n\n{NOT_SIMULATED}")
+            self.statusBar().showMessage(f"{item.title.replace(chr(10), ' ')}: {NOT_SIMULATED}", 8000)
+            return
+        if item.is_menu:
+            self.menu_stack.append(item)
+            self._refresh_menu()
+            return
+        if item.action == BACK:
+            self.menu_back()
+            return
+        self.run_action(item.action, item)
 
-    def _softkey_auto(self, number: int) -> None:
-        if number == 1:
+    def show_screen(self, text: str) -> None:
+        self.screen_text.setPlainText(text)
+        self.tabs.setCurrentIndex(SCREEN_TAB)
+
+    def run_action(self, action: str, item: MenuItem | None = None) -> None:
+        name, _, arg = action.partition(":")
+        handlers: dict[str, Callable[[], object]] = {
+            "preset": self.preset,
+            "goto": self.goto_dialog,
+            "cutting_data": lambda: CuttingDataDialog(self).exec(),
+            "jog_step": self._next_jog_step,
+            "toggle_single": self._toggle_single,
+            "toggle_realtime": self._toggle_realtime,
+            "select": self.select_program,
+            "toggle_graphics": self.toggle_graphics,
+            "start_stop": lambda: self.pause() if self.running else self.start(),
+            "test_fast": self._test_fast,
+            "edit_main": lambda: self._goto_section(None),
+            "edit_sub": lambda: self._goto_section("%*"),
+            "edit_macro": lambda: self._goto_section("%%"),
+            "tools": lambda: self.tabs.setCurrentIndex(2),
+            "parameters": lambda: self._focus_setup(self.parameter_edit),
+            "zero_points": lambda: self._focus_setup(self.zero_table),
+            "contour": self._toggle_contour,
+            "library": lambda: self.select_program(EntryKind.PROGRAM, EntryKind.MACRO),
+            "library_macros": lambda: self.select_program(EntryKind.MACRO),
+            "notes": lambda: self.tabs.setCurrentIndex(NOTES_TAB),
+            "messages": lambda: self.tabs.setCurrentIndex(1),
+            "transfer_in": self._transfer_in,
+            "transfer_out": self._transfer_out,
+            "toggle_dripfeed": self._toggle_dripfeed,
+            "config_io": self._config_io,
+            "transfer_start": self._transfer_start,
+            "screen_text": lambda: self._set_screen("text"),
+            "screen_graphics": lambda: self._set_screen("graphics"),
+            "toggle_screen": lambda: self._set_screen("text" if self.graphics_on else "graphics"),
+            "toggle_tool": self._toggle_tool,
+            "toggle_rapid": lambda: self.rapid_box.setChecked(not self.rapid_box.isChecked()),
+            "clear": self.rewind,
+            "reference": lambda: self.tabs.setCurrentIndex(3),
+            "find": self.edit_find,
+            "replace": self.edit_replace,
+            "copy": lambda: self._edit("copy"),
+            "cut": lambda: self._edit("cut"),
+            "delete": lambda: self._edit("delete"),
+            "paste": lambda: self._edit("paste"),
+        }
+        if name == "jog":
+            axis, sign = arg.split(":")
+            self.jog(int(axis), (1.0 if sign == "+" else -1.0) * float(self.jog_step.currentText()))
+        elif name == "view":
+            self._set_view(arg)
+        elif name == "rotate":
+            self.view.yaw += float(arg)
+            self.view.set_mode(self.view.mode)
+        elif name == "zoom":
+            if arg == "in":
+                self.view.zoom = min(self.view.zoom * 1.5, 200.0)
+                self.view.update()
+            else:
+                self.view.fit()
+        elif name == "structure":
+            root = MAIN_MODES[int(arg)] if arg else None
+            self.show_screen("Menüstruktur des Simulators nach der DIALOG 11\n\n" + structure_text(root))
+        elif name == "dia":
+            self.dia(arg)
+        elif name in handlers:
+            handlers[name]()
+        else:
+            self.statusBar().showMessage(f"Funktion '{action}' ist im Simulator nicht belegt", 5000)
+        self._update_mode_display()
+        del item
+
+    # ------------------------------------------------------------------ menu actions
+    def _focus_setup(self, widget: QWidget) -> None:
+        self.tabs.setCurrentIndex(2)
+        widget.setFocus()
+
+    def _next_jog_step(self) -> None:
+        self.jog_step.setCurrentIndex((self.jog_step.currentIndex() + 1) % self.jog_step.count())
+        self._update_mode_display()
+
+    def _toggle_single(self) -> None:
+        self.single_block_mode = not self.single_block_mode
+
+    def _toggle_realtime(self) -> None:
+        self.realtime = not self.realtime
+        self.speed_combo.setCurrentIndex(0 if self.realtime else 3)
+
+    def _test_fast(self) -> None:
+        self.speed_combo.setCurrentIndex(self.speed_combo.count() - 1)
+        self.realtime = False
+        self.start()
+
+    def _toggle_contour(self) -> None:
+        self.contour_on = not self.contour_on
+        self.statusBar().showMessage(
+            "Konturrechner: freie Konturelemente (UW, UR, FA) werden im Simulator nicht berechnet", 8000
+        )
+
+    def _toggle_tool(self) -> None:
+        self.show_tool = not self.show_tool
+        self.view.tool_radius = self.view.tool_radius if self.show_tool else 0.0
+        self._show_frame()
+
+    def toggle_graphics(self) -> None:
+        self._set_screen("text" if self.graphics_on else "graphics")
+
+    def _set_screen(self, screen: str) -> None:
+        self.graphics_on = screen == "graphics"
+        sizes = self.splitter.sizes()
+        total = sum(sizes) or 1360
+        if self.graphics_on:
+            self.splitter.setSizes([int(total * 0.26), int(total * 0.46), int(total * 0.28)])
+        else:
+            self.splitter.setSizes([int(total * 0.62), 0, int(total * 0.38)])
+        self._update_mode_display()
+
+    def _set_view(self, arg: str) -> None:
+        from deckellink.gui.widgets.toolpath_view import ViewMode
+
+        mode = self.view.cycle_mode() if arg == "cycle" else ViewMode(arg)
+        if arg != "cycle":
+            self.view.set_mode(mode)
+        self.view_combo.blockSignals(True)
+        self.view_combo.setCurrentIndex(self.view_combo.findData(mode))
+        self.view_combo.blockSignals(False)
+
+    def _goto_section(self, prefix: str | None) -> None:
+        if self.mode != 3:
+            self.set_mode(3)
+        document = self.editor.document()
+        target = 0
+        if prefix is not None:
+            for number in range(document.blockCount()):
+                text = document.findBlockByNumber(number).text().strip()
+                if text.startswith(prefix) and (prefix != "%*" or not text.startswith("%%")):
+                    target = number
+                    break
+            else:
+                self.show_screen(
+                    f"Kein Abschnitt '{prefix}n' im Programm.\n\nNeuer Abschnitt: am Ende eine Zeile nur mit "
+                    f"'{prefix}1' einfügen und darunter die Sätze schreiben (Simulator-Konvention, siehe Handbuch)."
+                )
+                return
+        cursor = QTextCursor(document.findBlockByNumber(target))
+        self.editor.setTextCursor(cursor)
+        self.editor.setFocus()
+
+    def preset(self) -> None:
+        """PRESET (simulator only): the current manual position becomes the displayed zero."""
+        self.preset_offset = self.manual_position
+        self.statusBar().showMessage("PRESET: Anzeige an dieser Position auf 0 gesetzt (nur Simulator)", 8000)
+        self._show_frame()
+
+    def goto_dialog(self) -> None:
+        current = " ".join(f"{a}{v:g}" for a, v in zip("XYZ", self._display(self.manual_position), strict=True))
+        text, ok = QInputDialog.getText(self, "FAHREN (Simulator)", "Zielposition, z. B. X10 Y20 Z5:", text=current)
+        if ok:
+            self.goto(text)
+
+    def goto(self, text: str) -> bool:
+        target = list(self._display(self.manual_position))
+        import re as _re
+
+        found = False
+        for axis, value in _re.findall(r"([XYZ])\s*([-+]?\d+(?:[.,]\d*)?)", text.upper()):
+            target["XYZ".index(axis)] = float(value.replace(",", "."))
+            found = True
+        if not found:
+            self.statusBar().showMessage("Keine gültige Position (z. B. X10 Y20 Z5)", 5000)
+            return False
+        position = (
+            target[0] + self.preset_offset[0],
+            target[1] + self.preset_offset[1],
+            target[2] + self.preset_offset[2],
+        )
+        self.manual_position = position
+        self.view.manual_trace.append(position)
+        self.view.set_tool(position, self.view.tool_radius, self.view.done_moves)
+        self._show_frame()
+        return True
+
+    def _display(self, position: Vec3) -> Vec3:
+        if self.mode != 1:
+            return position
+        return (
+            position[0] - self.preset_offset[0],
+            position[1] - self.preset_offset[1],
+            position[2] - self.preset_offset[2],
+        )
+
+    def select_program(self, *kinds: EntryKind) -> bool:
+        dialog = SelectProgramDialog(self.library, kinds or (EntryKind.PROGRAM, EntryKind.MACRO), self)
+        if dialog.exec() != SelectProgramDialog.DialogCode.Accepted or dialog.chosen_path is None:
+            return False
+        self.load_path(dialog.chosen_path)
+        self.pending_start_block = dialog.start_number()
+        return True
+
+    def apply_start_block(self, number: int) -> bool:
+        """VORLAUF: jump to block N."""
+        document = self.editor.document()
+        for index in range(document.blockCount()):
+            text = document.findBlockByNumber(index).text().strip().upper()
+            matches = text.startswith(f"N{number} ") or text == f"N{number}"
+            time = self.playback.time_of_line(index + 1) if matches and self.playback is not None else None
+            if time is not None:
+                self.time = time
+                self._show_frame()
+                return True
+        self.statusBar().showMessage(f"Satz N{number} nicht gefunden", 5000)
+        return False
+
+    def _transfer_in(self) -> None:
+        self.show_screen(
+            "DATEN-TRANSFER › EINLESEN\n\nAn der Steuerung: Programm von einem Partnergerät einlesen.\n"
+            "In DeckelLink entspricht das der Seite 'Übertragen' (Senden) bzw. 'Programmverwaltung' → "
+            "'Zum Senden laden'.\n\nIm Simulator: Programm aus der Programmverwaltung oder einer Datei anwählen."
+        )
+        self.select_program()
+
+    def _transfer_out(self) -> None:
+        self.show_screen(
+            "DATEN-TRANSFER › AUSLESEN\n\nAn der Steuerung: Programm an ein Partnergerät ausgeben.\n"
+            "In DeckelLink entspricht das der Seite 'Empfangen'.\n\nIm Simulator: Programm als neue Datei speichern."
+        )
+        self.save_as()
+
+    def _toggle_dripfeed(self) -> None:
+        self.dripfeed_on = not self.dripfeed_on
+        self.show_screen(
+            "DATEN-TRANSFER › NACHLADEN " + ("EIN" if self.dripfeed_on else "AUS") + "\n\n"
+            "An der Steuerung: Nachladefunktion aktivieren (F3), EINLESEN wählen (F1) und starten (F8), dann in "
+            "Hauptbetriebsart 2 das Programm anwählen und mit Zyklus-Start abarbeiten.\n\n"
+            "In DeckelLink: Profil mit LSV2-Protokoll wählen und auf der Seite 'Übertragen' bzw. in der "
+            "Programmverwaltung 'Nachladebetrieb (LSV2)' starten. Die CNC fordert die Sätze über Quittungen an; "
+            "DeckelLink startet die Bearbeitung nie.\n\nIm Simulator: START (F8) zeigt den Ablauf als Testlauf."
+        )
+
+    def _config_io(self) -> None:
+        self.show_screen(
+            "DATEN-TRANSFER › KONFIG I/O\n\nAn der Steuerung: Schnittstellenparameter für bis zu 7 Partnergeräte "
+            "(Gerätenummer, Kanal, Baudrate bis 19200, Datenbits, Stoppbits, Parität, Protokoll).\n\n"
+            "Die Werte müssen mit dem DeckelLink-Profil übereinstimmen (Einstellungen → Profil). "
+            "Bitte an der Steuerung ablesen und in der Verifikations-Checkliste eintragen."
+        )
+
+    def _transfer_start(self) -> None:
+        if self.dripfeed_on:
+            self.set_mode(2)
+            self.dripfeed_on = True
             self.start()
-        elif number == 2:
-            self.single_block()
-        elif number == 3:
-            self.pause()
-        elif number == 4:
-            self.rewind()
-        elif number == 5:
-            self.to_end()
+            self.statusBar().showMessage("Nachladebetrieb (Simulation): Programm läuft als Testlauf", 8000)
         else:
-            self._common_key(number)
+            self.statusBar().showMessage("Im Simulator gibt es keine Übertragung - EINLESEN/AUSLESEN wählen", 8000)
 
-    def _softkey_program(self, number: int) -> None:
-        if number == 1:
-            self.resimulate()
-        elif number == 2:
-            self.load_text(DEMO_PROGRAM, "Demoprogramm")
-            self.parameter_edit.setPlainText("\n".join(f"{k}={v}" for k, v in DEMO_PARAMETERS.items()))
-        elif number == 3:
-            self.open_file()
-        elif number == 4:
-            self.save_as()
-        elif number == 5:
-            self.tabs.setCurrentIndex(1)
-            self.resimulate()
+    def dia(self, kind: str) -> str | None:
+        if self.mode != 3:
+            self.set_mode(3)
+        dialog = DiaDialog(kind, self._next_block_number(), self)
+        if dialog.exec() != DiaDialog.DialogCode.Accepted:
+            return None
+        block = dialog.block()
+        self.insert_block(block)
+        return block
+
+    def insert_block(self, block: str) -> None:
+        cursor = self.editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock)
+        cursor.insertText("\n" + block)
+        self.editor.setTextCursor(cursor)
+
+    def _next_block_number(self) -> int:
+        import re as _re
+
+        numbers = [int(n) for n in _re.findall(r"(?m)^\s*N(\d+)", self.editor.toPlainText().upper())]
+        return (max(numbers) + 10) if numbers else 10
+
+    def edit_find(self, text: str | None = None) -> bool:
+        if text is None:
+            text, ok = QInputDialog.getText(self, "EDIT › SUCHEN", "Suchtext:")
+            if not ok:
+                return False
+        found = self.editor.find(text)
+        if not found:
+            self.editor.moveCursor(QTextCursor.MoveOperation.Start)
+            found = self.editor.find(text)
+        self.statusBar().showMessage(f"'{text}' {'gefunden' if found else 'nicht gefunden'}", 5000)
+        return bool(found)
+
+    def edit_replace(self, old: str | None = None, new: str | None = None) -> int:
+        if self.mode != 3:
+            self.statusBar().showMessage("EDIT ist nur in Hauptbetriebsart 3 PROGRAMM möglich", 5000)
+            return 0
+        if old is None or new is None:
+            old, ok = QInputDialog.getText(self, "EDIT › ERSETZEN", "Suchen:")
+            if not ok or not old:
+                return 0
+            new, ok = QInputDialog.getText(self, "EDIT › ERSETZEN", f"'{old}' ersetzen durch:")
+            if not ok:
+                return 0
+        text = self.editor.toPlainText()
+        count = text.count(old)
+        if count:
+            cursor = self.editor.textCursor()
+            cursor.select(QTextCursor.SelectionType.Document)
+            cursor.insertText(text.replace(old, new))
+        self.statusBar().showMessage(f"{count} Stelle(n) ersetzt", 5000)
+        return count
+
+    def _edit(self, operation: str) -> None:
+        if self.mode != 3 and operation != "copy":
+            self.statusBar().showMessage("EDIT ist nur in Hauptbetriebsart 3 PROGRAMM möglich", 5000)
+            return
+        cursor = self.editor.textCursor()
+        if not cursor.hasSelection() and operation in ("copy", "cut", "delete"):
+            cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+            self.editor.setTextCursor(cursor)
+        if operation == "copy":
+            self.editor.copy()
+        elif operation == "cut":
+            self.editor.cut()
+        elif operation == "paste":
+            self.editor.paste()
         else:
-            self._common_key(number)
+            cursor.removeSelectedText()
 
-    def _softkey_manual(self, number: int) -> None:
-        if number <= 6:
-            axis = (number - 1) // 2
-            sign = 1.0 if number % 2 == 0 else -1.0
-            self.jog(axis, sign * float(self.jog_step.currentText()))
-        elif number == 7:
-            self.jog_step.setCurrentIndex((self.jog_step.currentIndex() + 1) % self.jog_step.count())
-            self._update_mode_display()
-        else:
-            self.tabs.setCurrentIndex(3)
-
-    def _common_key(self, number: int) -> None:
-        if number == 6:
-            mode = self.view.cycle_mode()
-            self.view_combo.blockSignals(True)
-            self.view_combo.setCurrentIndex(self.view_combo.findData(mode))
-            self.view_combo.blockSignals(False)
-        elif number == 7:
-            self.view.fit()
-        elif number == 8:
-            self.tabs.setCurrentIndex(3)
+    # ------------------------------------------------------------------ transfer follow-up (display only)
+    def follow_transfer(self, line: int) -> None:
+        """Show the transfer progress of DeckelLink (line already transmitted), not the machine position."""
+        if not self.follow_box.isChecked() or self.playback is None:
+            return
+        self.pause()
+        self.follow_line = line
+        self.time = self.playback.time_until_line(line)
+        self._show_frame()
+        self._update_mode_display()
 
     # ------------------------------------------------------------------ playback
     def start(self) -> None:
         if self.playback is None:
+            return
+        if self.single_block_mode:
+            self.single_block()
             return
         if self.time >= self.playback.total:
             self.time = 0.0
@@ -603,9 +1048,9 @@ class SimulatorWindow(QMainWindow):
         if frame is None or self.playback is None:
             return
         if self.mode == 1:
-            self._show_position(self.manual_position, (0.0, 0.0, 0.0), frame)
+            self._show_position(self._display(self.manual_position), (0.0, 0.0, 0.0), frame)
             return
-        radius = frame.snapshot.tool_radius
+        radius = frame.snapshot.tool_radius if self.show_tool else 0.0
         done = frame.move_index if frame.move_index >= 0 else 0
         if frame.finished:
             done = len(self.playback.result.moves)
@@ -688,10 +1133,29 @@ class SimulatorWindow(QMainWindow):
         self.view.set_tool(self.manual_position, self.view.tool_radius, self.view.done_moves)
         frame = self._current_frame()
         if frame is not None:
-            self._show_position(self.manual_position, (0.0, 0.0, 0.0), frame)
+            self._show_position(self._display(self.manual_position), (0.0, 0.0, 0.0), frame)
         self.statusBar().showMessage(f"Simulator-Achse {'XYZ'[axis]} um {delta:+g} mm verfahren (keine Maschine)")
 
     # ------------------------------------------------------------------ files
+    def load_demo(self) -> None:
+        self.load_text(DEMO_PROGRAM, "Demoprogramm")
+        self.parameter_edit.setPlainText("\n".join(f"{k}={v}" for k, v in DEMO_PARAMETERS.items()))
+
+    def save_to_library(self) -> bool:
+        if self.save_callback is None:
+            return False
+        text = self.editor.toPlainText().replace("\r\n", "\n").replace("\n", "\r\n")
+        try:
+            message = self.save_callback(text.encode("ascii"))
+        except UnicodeEncodeError:
+            QMessageBox.warning(self, "Speichern", "Das Programm enthält Zeichen außerhalb von 7-Bit-ASCII.")
+            return False
+        except Exception as exc:  # storage errors are shown, never fatal
+            QMessageBox.warning(self, "Speichern", f"Speichern fehlgeschlagen: {exc}")
+            return False
+        self.statusBar().showMessage(message, 8000)
+        return True
+
     def load_text(self, text: str, name: str) -> None:
         self.source_name = name
         self.editor.blockSignals(True)
