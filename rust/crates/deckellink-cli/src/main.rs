@@ -11,9 +11,12 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use deckellink_core::clock::{CancelToken, Clock, SystemClock};
+use deckellink_core::transfer::lsv2_transfer::{Lsv2ProgramReceiver, Lsv2ProgramSender};
 use deckellink_core::transfer::receiver::{process_received, ProgramReceiver};
 use deckellink_core::transfer::sender::ProgramSender;
 use deckellink_core::transfer::{Event, EventSink, SendState};
+use deckellink_core::transport::lsv2_sim::{Lsv2SimConfig, Lsv2SimulatedCnc};
+use deckellink_core::transport::rfc2217::Rfc2217Transport;
 use deckellink_core::transport::serial::{available_ports, SerialTransport};
 use deckellink_core::transport::simulated::{SimulatedTransport, SimulationConfig};
 use deckellink_core::transport::tcp::TcpTransport;
@@ -37,9 +40,11 @@ Verwendung:
   deckellink-cli prepare <datei> <neue-datei> [--profile <id|datei.json>]
                                                    Aufbereitete Transferdaten als NEUE Datei schreiben
   deckellink-cli ports                            Serielle Anschlüsse auflisten
-  deckellink-cli send <datei> (--port COM3 | --tcp HOST:PORT | --sim) [--profile ...]
-                                                   NC-Datei senden (reale Ports nur nach getippter Bestätigung)
-  deckellink-cli receive <neue-datei> (--port COM3 | --tcp HOST:PORT | --sim) [--profile ...]
+  deckellink-cli send <datei> (--port COM3 | --tcp HOST:PORT | --rfc2217 HOST:PORT | --sim) [--profile ...] [--drip]
+                                                   NC-Datei senden; LSV2-Profile senden mit Protokoll,
+                                                   --drip = Nachladebetrieb (Start nur an der CNC).
+                                                   Reale Ports nur nach getippter Bestätigung.
+  deckellink-cli receive <neue-datei> (--port COM3 | --tcp HOST:PORT | --rfc2217 HOST:PORT | --sim) [--profile ...]
                                                    Programm von der CNC empfangen (Ausgabe an der CNC starten)
   deckellink-cli analyze-json <profil.json> <datei>
                                                    Maschinenlesbare Analyse (Gleichwertigkeitstests)
@@ -126,6 +131,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         "send" => send(rest),
         "receive" => receive(rest),
+        "lsv2-trace" => lsv2_trace(rest),
         "analyze-json" => {
             let [profile_file, file] = rest else {
                 return Err(USAGE.into());
@@ -245,7 +251,9 @@ struct Options {
     profile: Option<String>,
     port: Option<String>,
     tcp: Option<String>,
+    rfc2217: Option<String>,
     sim: bool,
+    drip: bool,
 }
 
 fn parse_options(args: &[String]) -> Result<Options, String> {
@@ -256,13 +264,18 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
             "--profile" => options.profile = Some(iter.next().ok_or("--profile ohne Wert")?.clone()),
             "--port" => options.port = Some(iter.next().ok_or("--port ohne Wert")?.clone()),
             "--tcp" => options.tcp = Some(iter.next().ok_or("--tcp ohne Wert")?.clone()),
+            "--rfc2217" => options.rfc2217 = Some(iter.next().ok_or("--rfc2217 ohne Wert")?.clone()),
             "--sim" => options.sim = true,
+            "--drip" => options.drip = true,
             _ => options.positional.push(arg.clone()),
         }
     }
-    let targets = usize::from(options.port.is_some()) + usize::from(options.tcp.is_some()) + usize::from(options.sim);
+    let targets = usize::from(options.port.is_some())
+        + usize::from(options.tcp.is_some())
+        + usize::from(options.rfc2217.is_some())
+        + usize::from(options.sim);
     if targets != 1 {
-        return Err("Genau eine Verbindung angeben: --port, --tcp oder --sim".into());
+        return Err("Genau eine Verbindung angeben: --port, --tcp, --rfc2217 oder --sim".into());
     }
     Ok(options)
 }
@@ -273,17 +286,45 @@ fn make_transport(
     machine_program: Vec<u8>,
 ) -> Result<Box<dyn Transport>, String> {
     if options.sim {
-        let config = SimulationConfig { machine_program, speed_factor: 50.0, ..SimulationConfig::default() };
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
+        if profile.protocol.is_lsv2() {
+            let config = Lsv2SimConfig {
+                program: machine_program,
+                speed_factor: 50.0,
+                buffer_telegrams: if options.drip { 3 } else { 0 },
+                execution_s_per_telegram: if options.drip { 0.2 } else { 0.0 },
+                ..Lsv2SimConfig::default()
+            };
+            return Ok(Box::new(Lsv2SimulatedCnc::new(
+                profile.serial.clone(),
+                profile.protocol.clone(),
+                config,
+                clock,
+            )));
+        }
+        let config = SimulationConfig { machine_program, speed_factor: 50.0, ..SimulationConfig::default() };
         return Ok(Box::new(SimulatedTransport::new(profile.serial.clone(), config, clock)));
     }
     if let Some(port) = &options.port {
         return Ok(Box::new(SerialTransport::new(port.clone(), profile.serial.clone())));
     }
+    if let Some(endpoint) = &options.rfc2217 {
+        let (host, port) = split_endpoint(endpoint, "--rfc2217")?;
+        return Ok(Box::new(Rfc2217Transport::new(host, port, profile.serial.clone())));
+    }
     let endpoint = options.tcp.clone().unwrap_or_default();
-    let (host, port) = endpoint.rsplit_once(':').ok_or("--tcp erwartet HOST:PORT")?;
-    let port: u32 = port.parse().map_err(|_| format!("Ungültiger TCP-Port: {port}"))?;
+    let (host, port) = split_endpoint(&endpoint, "--tcp")?;
     Ok(Box::new(TcpTransport::new(host, port, profile.serial.clone())))
+}
+
+/// Splits `HOST:PORT` into host and TCP port.
+fn split_endpoint<'a>(endpoint: &'a str, option: &str) -> Result<(&'a str, u32), String> {
+    let (host, port) = endpoint.rsplit_once(':').ok_or_else(|| format!("{option} erwartet HOST:PORT"))?;
+    let port: u32 = port.parse().map_err(|_| format!("Ungültiger TCP-Port: {port}"))?;
+    if host.is_empty() || port == 0 || port > 65535 {
+        return Err(format!("{option} erwartet HOST:PORT (Port 1-65535)"));
+    }
+    Ok((host, port))
 }
 
 /// Prints state changes and progress in 10 % steps.
@@ -336,8 +377,18 @@ fn send(args: &[String]) -> Result<ExitCode, String> {
         eprintln!("Senden gesperrt: Die Datei hat Prüffehler.");
         return Ok(ExitCode::from(1));
     }
+    if options.drip && !profile.protocol.is_lsv2() {
+        return Err("Nachladebetrieb erfordert ein Profil mit LSV2-Protokoll (z. B. dialog11_lsv2_7e1).".into());
+    }
     let payload = transform(&data, &profile.transfer, false).map_err(|e| e.to_string())?;
     let mut transport = make_transport(&options, &profile, Vec::new())?;
+    if options.drip {
+        eprintln!(
+            "\nNACHLADEBETRIEB (LSV2): Die CNC fordert die Sätze während der Bearbeitung an. Das Programm wird \
+             ausschließlich an der CNC angewählt und gestartet. Ein Abbruch hier hält die Maschine NICHT an - \
+             im Notfall an der Steuerung stoppen."
+        );
+    }
     if !options.sim {
         let question = format!(
             "\nREALE ÜBERTRAGUNG an {} ({}), Profil {} ({})\n{} Bytes, {} Zeilen. Einlesen an der CNC muss gestartet sein.",
@@ -358,7 +409,14 @@ fn send(args: &[String]) -> Result<ExitCode, String> {
     let clock = SystemClock::default();
     let token = CancelToken::new();
     let mut console = Console::default();
-    let result = ProgramSender::new(transport.as_mut(), &profile, &clock, &token, &mut console).send(&payload);
+    let result = if profile.protocol.is_lsv2() {
+        let mut sender =
+            Lsv2ProgramSender::new(transport.as_mut(), &profile, &clock, &token, &mut console, options.drip);
+        sender.program_name = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        sender.send(&payload)
+    } else {
+        ProgramSender::new(transport.as_mut(), &profile, &clock, &token, &mut console).send(&payload)
+    };
     match (&result.state, &result.error) {
         (SendState::Completed, _) => {
             println!("Übertragung abgeschlossen: {} Bytes in {:.1} s", result.bytes_sent, result.duration_s);
@@ -389,7 +447,11 @@ fn receive(args: &[String]) -> Result<ExitCode, String> {
     let clock = SystemClock::default();
     let token = CancelToken::new();
     let mut console = Console::default();
-    let result = ProgramReceiver::new(transport.as_mut(), &profile, &clock, &token, &mut console).receive();
+    let result = if profile.protocol.is_lsv2() {
+        Lsv2ProgramReceiver::new(transport.as_mut(), &profile, &clock, &token, &mut console).receive()
+    } else {
+        ProgramReceiver::new(transport.as_mut(), &profile, &clock, &token, &mut console).receive()
+    };
     if result.raw.is_empty() {
         eprintln!("{} - {}", result.state.label(), result.end_reason.label());
         if let Some(error) = &result.error {
@@ -414,4 +476,99 @@ fn receive(args: &[String]) -> Result<ExitCode, String> {
         println!("  - {note}");
     }
     Ok(if program.complete { ExitCode::SUCCESS } else { ExitCode::from(1) })
+}
+
+fn json_list(config: &serde_json::Value, key: &str) -> Vec<usize> {
+    config
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .map(|items| items.iter().filter_map(|v| v.as_u64()).filter_map(|v| usize::try_from(v).ok()).collect())
+        .unwrap_or_default()
+}
+
+fn json_opt(config: &serde_json::Value, key: &str) -> Option<usize> {
+    config.get(key).and_then(serde_json::Value::as_u64).and_then(|v| usize::try_from(v).ok())
+}
+
+fn unhex(text: &str) -> Vec<u8> {
+    (0..text.len() / 2)
+        .filter_map(|i| text.get(2 * i..2 * i + 2))
+        .filter_map(|h| u8::from_str_radix(h, 16).ok())
+        .collect()
+}
+
+/// Wire-level trace against the simulated LSV2 CNC with virtual time (parity tests with Python).
+fn lsv2_trace(args: &[String]) -> Result<ExitCode, String> {
+    use deckellink_core::clock::FakeClock;
+    use deckellink_core::transfer::{Direction, ReceiveState};
+
+    let [profile_file, file, mode, config_json] = args else { return Err(USAGE.into()) };
+    let text = std::fs::read_to_string(profile_file).map_err(|e| e.to_string())?;
+    let (profile, _) = parse_profile_text(&text, profile_file, false).map_err(|e| e.to_string())?;
+    let data = std::fs::read(file).map_err(|e| e.to_string())?;
+    let config: serde_json::Value = serde_json::from_str(config_json).map_err(|e| e.to_string())?;
+    let sim = Lsv2SimConfig {
+        never_ready: config.get("never_ready").and_then(serde_json::Value::as_bool).unwrap_or(false),
+        buffer_telegrams: json_opt(&config, "buffer_telegrams").unwrap_or(0),
+        execution_s_per_telegram: config
+            .get("execution_s_per_telegram")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.0),
+        nak_on_telegrams: json_list(&config, "nak_on_telegrams"),
+        drop_ack_on_telegrams: json_list(&config, "drop_ack_on_telegrams"),
+        wack_on_telegrams: json_list(&config, "wack_on_telegrams"),
+        eot_after_telegrams: json_opt(&config, "eot_after_telegrams"),
+        disconnect_after_telegrams: json_opt(&config, "disconnect_after_telegrams"),
+        corrupt_bcc_on_sent_telegrams: json_list(&config, "corrupt_bcc_on_sent_telegrams"),
+        send_lines_per_telegram: json_opt(&config, "send_lines_per_telegram").unwrap_or(1),
+        program: config.get("program").and_then(serde_json::Value::as_str).map(unhex).unwrap_or_default(),
+        ..Lsv2SimConfig::default()
+    };
+    let clock = FakeClock::default();
+    let mut cnc = Lsv2SimulatedCnc::new(profile.serial.clone(), profile.protocol.clone(), sim, Arc::new(clock.clone()));
+    let token = CancelToken::new();
+    let mut events: Vec<Event> = Vec::new();
+    let (state, extra, duration) = if mode == "receive" {
+        let result = Lsv2ProgramReceiver::new(&mut cnc, &profile, &clock, &token, &mut events).receive();
+        let state = match result.state {
+            ReceiveState::Completed => "completed",
+            ReceiveState::Cancelled => "cancelled",
+            ReceiveState::TimedOut => "timed_out",
+            _ => "failed",
+        };
+        (state, hex(&result.raw), result.duration_s)
+    } else {
+        let payload = transform(&data, &profile.transfer, false).map_err(|e| e.to_string())?;
+        let result =
+            Lsv2ProgramSender::new(&mut cnc, &profile, &clock, &token, &mut events, mode == "drip").send(&payload);
+        let state = match result.state {
+            SendState::Completed => "completed",
+            SendState::Cancelled => "cancelled",
+            _ => "failed",
+        };
+        (state, hex(&cnc.record().received_program()), result.duration_s)
+    };
+    let stream = |direction: Direction| -> String {
+        let bytes: Vec<u8> = events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Traffic(t) = e {
+                    (t.direction == direction).then(|| t.data.clone())
+                } else {
+                    None
+                }
+            })
+            .flatten()
+            .collect();
+        hex(&bytes)
+    };
+    let out = json!({
+        "state": state,
+        "tx": stream(Direction::Tx),
+        "rx": stream(Direction::Rx),
+        "data": extra,
+        "duration": (duration * 1000.0).round() / 1000.0,
+    });
+    println!("{out}");
+    Ok(ExitCode::SUCCESS)
 }

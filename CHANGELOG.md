@@ -2,6 +2,17 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.2] – 2026-11-27
+
+### Hinzugefügt (Rust, Etappe 2)
+- **LSV2** (DIN 66019 Basic Mode): Verbindungsaufbau (ENQ/DLE 0), Telegramme mit DLE-Transparenz und konfigurierbarer BCC, abwechselnde Quittungen, NAK-Wiederholung, WACK, RVI und EOT. Telegrammaufbau, Zeitgrenzen und Wiederholungen kommen wie in Python aus dem Profil und bleiben unverifiziert.
+- **Nachladebetrieb** über LSV2: Die CNC bestimmt das Tempo, das nächste Telegramm geht erst nach ihrer Quittung hinaus. Bei Abbruch wird, falls im Profil eingestellt, EOT gesendet.
+- LSV2-Empfang mit Prüfsummenkontrolle und Größengrenze.
+- Simulierte LSV2-CNC mit Fehlerbildern: NAK, verlorene Quittung, WACK, EOT, Trennung, nicht bereit, fehlerhafte BCC.
+- **RFC 2217** (Telnet-COM-Port-Steuerung) für Netzwerkadapter: Baudrate und Datenformat werden am Adapter gesetzt, die Modemleitungen gemeldet. Unterstützt der Adapter RFC 2217 nicht, erscheint eine klare Meldung.
+- Kommandozeile: `--drip` (Nachladebetrieb) und `--rfc2217 HOST:PORT`. Ein LSV2-Profil überträgt automatisch über LSV2.
+- Gleichwertigkeitstest um 14 LSV2-Szenarien erweitert: Gesendete und empfangene Bytes, Zustand, Daten und Dauer stimmen mit Python überein. Zufallsfälle und LSV2-Szenarien ergeben 0 Abweichungen.
+
 ## [Rust 0.8.0-alpha.1] – 2026-11-26
 
 Beginn des Neubaus in Rust (Verzeichnis `rust/`, siehe `rust/README.md`). Die Python-Version bleibt die Anwendung mit Oberfläche.

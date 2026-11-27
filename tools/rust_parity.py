@@ -20,6 +20,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from deckellink.clock import FakeClock
 from deckellink.domain.errors import DeckelLinkError
 from deckellink.domain.models import (
     CommentHandling,
@@ -28,10 +29,15 @@ from deckellink.domain.models import (
     TabHandling,
     WhitespaceHandling,
 )
+from deckellink.domain.results import TrafficEvent
 from deckellink.nc.analyzer import analyze
 from deckellink.nc.transformer import transform
 from deckellink.profiles.loader import builtin_profiles_dir
 from deckellink.profiles.schema import parse_profile
+from deckellink.simulation.lsv2_cnc import Lsv2SimConfig, Lsv2SimulatedCnc
+from deckellink.transfer.lsv2_transfer import Lsv2ProgramReceiver, Lsv2ProgramSender
+from deckellink.transfer.receiver import ReceiveCallbacks
+from deckellink.transfer.sender import SendCallbacks
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CLI = ROOT / "rust" / "target" / "release" / "deckellink-cli"
@@ -139,6 +145,102 @@ def python_result(data: bytes, profile: Profile) -> dict[str, Any]:
     }
 
 
+LSV2_PROGRAM = (
+    b"(PARITY)\r\nN10 G90 G17\r\nN20 G00 X0 Y0 Z50\r\nN30 \x10DLE\r\nN40 G01 Z-1 F100\r\nN50 X40\r\nN60 M30\r\n"
+)
+LSV2_CASES: list[tuple[str, dict[str, Any], dict[str, Any]]] = [
+    ("send", {}, {}),
+    ("drip", {"buffer_telegrams": 2, "execution_s_per_telegram": 1.5}, {}),
+    ("send", {"nak_on_telegrams": [2, 4]}, {}),
+    ("send", {"drop_ack_on_telegrams": [3]}, {}),
+    ("drip", {"wack_on_telegrams": [2, 3]}, {}),
+    ("drip", {"eot_after_telegrams": 3}, {}),
+    ("send", {"never_ready": True}, {"link_timeout_ms": 5000}),
+    ("send", {"disconnect_after_telegrams": 3}, {}),
+    ("send", {}, {"transparent": False, "bcc_mode": "transmitted"}),
+    ("send", {}, {"bcc_mode": "none", "lines_per_telegram": 3, "include_line_ending": False}),
+    ("send", {}, {"start_telegrams": ["%{name}"], "end_telegrams": ["END"]}),
+    ("receive", {"program": LSV2_PROGRAM.hex()}, {}),
+    (
+        "receive",
+        {"program": LSV2_PROGRAM.hex(), "corrupt_bcc_on_sent_telegrams": [2], "send_lines_per_telegram": 2},
+        {},
+    ),
+    ("receive", {"program": LSV2_PROGRAM.hex()}, {"include_line_ending": False}),
+]
+
+
+def python_lsv2(profile: Profile, mode: str, config: dict[str, Any]) -> dict[str, Any]:
+    sim = Lsv2SimConfig(
+        never_ready=bool(config.get("never_ready", False)),
+        buffer_telegrams=int(config.get("buffer_telegrams", 0)),
+        execution_s_per_telegram=float(config.get("execution_s_per_telegram", 0.0)),
+        nak_on_telegrams=tuple(config.get("nak_on_telegrams", ())),
+        drop_ack_on_telegrams=tuple(config.get("drop_ack_on_telegrams", ())),
+        wack_on_telegrams=tuple(config.get("wack_on_telegrams", ())),
+        eot_after_telegrams=config.get("eot_after_telegrams"),
+        disconnect_after_telegrams=config.get("disconnect_after_telegrams"),
+        corrupt_bcc_on_sent_telegrams=tuple(config.get("corrupt_bcc_on_sent_telegrams", ())),
+        send_lines_per_telegram=int(config.get("send_lines_per_telegram", 1)),
+        program=bytes.fromhex(config.get("program", "")),
+    )
+    clock = FakeClock()
+    cnc = Lsv2SimulatedCnc(profile.serial, profile.protocol, sim, clock)
+    traffic: list[TrafficEvent] = []
+    if mode == "receive":
+        received = Lsv2ProgramReceiver(
+            cnc, profile, clock=clock, callbacks=ReceiveCallbacks(on_traffic=traffic.append)
+        ).receive()
+        state, data, duration = received.state.value, received.raw.hex(), received.duration_s
+    else:
+        payload = transform(LSV2_PROGRAM, profile.transfer)
+        sender = Lsv2ProgramSender(
+            cnc,
+            profile,
+            drip_feed=mode == "drip",
+            program_name="PROGRAMM",
+            clock=clock,
+            callbacks=SendCallbacks(on_traffic=traffic.append),
+        )
+        result = sender.send(payload)
+        state, data, duration = result.state.value, cnc.received_program.hex(), result.duration_s
+    return {
+        "state": state,
+        "tx": b"".join(e.data for e in traffic if e.direction.value == "TX").hex(),
+        "rx": b"".join(e.data for e in traffic if e.direction.value == "RX").hex(),
+        "data": data,
+        "duration": round(duration * 1000) / 1000,
+    }
+
+
+def lsv2_parity(cli: Path, tmp_dir: Path) -> int:
+    lsv2_json = json.loads((builtin_profiles_dir() / "dialog11_lsv2_7e1.json").read_text(encoding="utf-8"))
+    failures = 0
+    for index, (mode, config, protocol_changes) in enumerate(LSV2_CASES):
+        data = json.loads(json.dumps(lsv2_json))
+        data["protocol"].update(protocol_changes)
+        profile, _ = parse_profile(data)
+        profile_path = tmp_dir / "lsv2.json"
+        nc_path = tmp_dir / "lsv2.nc"
+        profile_path.write_text(json.dumps(profile.to_dict()), encoding="utf-8")
+        nc_path.write_bytes(LSV2_PROGRAM)
+        completed = subprocess.run(
+            [str(cli), "lsv2-trace", str(profile_path), str(nc_path), mode, json.dumps(config)],
+            capture_output=True,
+            check=False,
+        )
+        rust = json.loads(completed.stdout) if completed.returncode == 0 else {"error": completed.stderr.decode()}
+        python = python_lsv2(profile, mode, config)
+        if rust != python:
+            failures += 1
+            print(f"--- LSV2 case {index} ({mode}, {config}, {protocol_changes}) differs")
+            for key in python:
+                if python[key] != rust.get(key):
+                    print(f"  {key}:\n    python={python[key]}\n    rust  ={rust.get(key)}")
+    print(f"{len(LSV2_CASES)} LSV2 wire cases, {failures} differences")
+    return failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=int, default=2000)
@@ -179,7 +281,8 @@ def main() -> int:
                     for key in python:
                         if python[key] != rust.get(key):
                             print(f"  {key}:\n    python={python[key]}\n    rust  ={rust.get(key)}")
-    print(f"{args.cases} cases, {failures} differences")
+        print(f"{args.cases} cases, {failures} differences")
+        failures += lsv2_parity(args.cli, tmp_dir)
     return 1 if failures else 0
 
 

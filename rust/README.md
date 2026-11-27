@@ -9,7 +9,7 @@ Ziel ist **maximale Programmstabilität**: eine einzelne Windows-`.exe` ohne Pyt
 - Ganzzahlüberläufe werden auch im Release-Build geprüft (`overflow-checks = true`).
 - CI-Gates: `cargo fmt --check`, `cargo clippy -- -D warnings`, Tests unter Linux und Windows.
 - **Eigenschaftstests (proptest):** Zufällige Bytes, Profile und Programme dürfen nie zu Abstürzen führen. Senden und Empfangen über die simulierte CNC liefert bitgenau dieselben Daten.
-- **Gleichwertigkeitstest mit Python:** `tools/rust_parity.py` vergleicht Prüfung und Aufbereitung beider Versionen über Tausende Zufallsdateien und Profilvarianten. Dieser Test hat bereits einen Meldungsfehler in der Python-Version gefunden: „215 Bytes. Grenze“ statt „215 Bytes, Grenze“.
+- **Gleichwertigkeitstest mit Python:** `tools/rust_parity.py` vergleicht Prüfung und Aufbereitung beider Versionen über Tausende Zufallsdateien und Profilvarianten. Für LSV2 vergleicht er außerdem 14 Szenarien Byte für Byte: gesendete und empfangene Bytes, Endzustand, Daten und Dauer. Die Szenarien decken NAK, verlorene Quittung, WACK, EOT durch die CNC, Verbindungsabbruch, BCC-Varianten, Start- und Endtelegramme sowie den Empfang mit fehlerhafter Prüfsumme ab. Dieser Test hat bereits einen Meldungsfehler in der Python-Version gefunden: „215 Bytes. Grenze“ statt „215 Bytes, Grenze“.
 
 ## Aufbau
 
@@ -20,13 +20,16 @@ rust/
                             src/deckellink/resources/profiles eingebunden - eine Quelle für beide)
     nc/                     Prüfung (analyzer), Aufbereitung (transformer), Bytehilfen (checks)
     clock.rs                Zeitquelle (System, beschleunigt, virtuell für Tests), Abbruch-Token
-    transport/              serieller Port (serialport), TCP-Netzwerkadapter, Simulator, Loopback
-    transfer/               Senden und Empfangen ohne Protokoll, Zustände, Fortschritt
+    transport/              serieller Port (serialport), TCP-Netzwerkadapter, RFC 2217 (rfc2217.rs),
+                            Simulator, simulierte LSV2-CNC (lsv2_sim.rs), Loopback
+    transfer/               Senden und Empfangen ohne Protokoll, Zustände, Fortschritt;
+                            LSV2-Verbindung und Telegramme (lsv2.rs), LSV2-Senden/-Nachladen/-Empfangen
+                            (lsv2_transfer.rs)
     storage.rs              SHA-256, exklusives Anlegen, atomares Schreiben (nie still überschreiben)
   crates/deckellink-cli/    Kommandozeile
 ```
 
-## Kommandozeile (Etappe 1)
+## Kommandozeile (Etappen 1 und 2)
 
 ```
 deckellink-cli profiles
@@ -36,9 +39,15 @@ deckellink-cli ports
 deckellink-cli send TEIL.nc --sim
 deckellink-cli send TEIL.nc --port COM3 --profile dialog11_7n1_rtscts
 deckellink-cli receive NEU.nc --port COM3
+deckellink-cli send TEIL.nc --tcp 192.168.0.50:4001
+deckellink-cli send TEIL.nc --rfc2217 192.168.0.50:4001
+deckellink-cli send TEIL.nc --sim --profile dialog11_lsv2_7e1 --drip
+deckellink-cli receive NEU.nc --sim --profile dialog11_lsv2_7e1
 ```
 
-Senden an einen realen Port (`--port`, `--tcp`) beginnt erst, wenn unmittelbar vorher `SENDEN` eingetippt wurde. Dateien werden nie überschrieben.
+Mit einem LSV2-Profil wird über LSV2 übertragen. `--drip` startet den Nachladebetrieb. Er ist nur mit LSV2-Profil möglich, und die CNC bestimmt das Tempo: Das nächste Telegramm geht erst nach ihrer Quittung hinaus. DeckelLink startet die Bearbeitung nie. Die LSV2-Einzelheiten bleiben unverifiziert, bis sie an der FP2A geprüft sind (siehe `docs/VERIFICATION_CHECKLIST.md`).
+
+Senden an einen realen Port (`--port`, `--tcp`, `--rfc2217`) beginnt erst, wenn unmittelbar vorher `SENDEN` eingetippt wurde. Dateien werden nie überschrieben.
 
 ## Bauen
 
@@ -53,7 +62,7 @@ cargo build --release      # target/release/deckellink-cli(.exe)
 | Etappe | Inhalt | Stand |
 |---|---|---|
 | 1 | Profile, NC-Prüfung/-Aufbereitung, Ports (seriell, TCP), Simulator, Senden/Empfangen, CLI, CI, Gleichwertigkeitstest | **fertig** |
-| 2 | LSV2-Protokoll und Nachladebetrieb, simulierte LSV2-CNC, RFC 2217 | offen |
+| 2 | LSV2-Protokoll und Nachladebetrieb, simulierte LSV2-CNC, RFC 2217; Gleichwertigkeit auf Byte-Ebene (14 LSV2-Szenarien) | **fertig** |
 | 3 | Maschinenparameter (Dateistruktur, Sicherung, Schreibsperren) | offen |
 | 4 | Oberfläche (egui): Übertragen, Empfangen, Archiv, Einstellungen, Diagnose, Terminal, Protokoll | offen |
 | 5 | DIALOG-11-Simulator mit Grafik und Steuerungsmenüs | offen |

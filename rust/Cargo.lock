@@ -198,7 +198,7 @@ dependencies = [
 
 [[package]]
 name = "deckellink-cli"
-version = "0.8.0-alpha.1"
+version = "0.8.0-alpha.2"
 dependencies = [
  "deckellink-core",
  "serde_json",
@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "deckellink-core"
-version = "0.8.0-alpha.1"
+version = "0.8.0-alpha.2"
 dependencies = [
  "chrono",
  "proptest",

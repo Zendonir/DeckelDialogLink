@@ -1,5 +1,7 @@
 //! Sending and receiving (plain protocol). LSV2 follows in a later stage of the Rust port.
 
+pub mod lsv2;
+pub mod lsv2_transfer;
 pub mod receiver;
 pub mod sender;
 
@@ -16,6 +18,7 @@ pub enum SendState {
     OpeningPort,
     WaitingForHandshake,
     Sending,
+    DripFeeding,
     Finishing,
     Completed,
     Cancelled,
@@ -30,6 +33,7 @@ impl SendState {
             SendState::OpeningPort => "Port wird geöffnet",
             SendState::WaitingForHandshake => "Warte auf Freigabe (Handshake)",
             SendState::Sending => "Sende Daten",
+            SendState::DripFeeding => "Nachladebetrieb - Daten werden nach Quittung der CNC geliefert",
             SendState::Finishing => "Übertragung wird abgeschlossen",
             SendState::Completed => "Übertragung abgeschlossen",
             SendState::Cancelled => "Übertragung abgebrochen",

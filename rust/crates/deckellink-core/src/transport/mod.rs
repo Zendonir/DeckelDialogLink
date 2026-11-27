@@ -3,6 +3,8 @@
 //! The GUI never talks to a port directly - only through [`Transport`].
 
 pub mod loopback;
+pub mod lsv2_sim;
+pub mod rfc2217;
 pub mod serial;
 pub mod simulated;
 pub mod tcp;
@@ -33,6 +35,16 @@ pub enum ErrorKind {
     ConnectionLost,
     Write,
     Read,
+    /// LSV2: the CNC did not become ready (no DLE 0 on ENQ).
+    Lsv2LinkTimeout,
+    /// LSV2: a telegram was not acknowledged after all retries.
+    Lsv2AckTimeout,
+    /// LSV2: too many NAKs / repetitions.
+    Lsv2RetryExceeded,
+    /// LSV2: the CNC ended the transfer (EOT or RVI).
+    CncAbort,
+    /// LSV2: other protocol failure.
+    Lsv2Protocol,
 }
 
 /// A transport failure with the affected port.
@@ -152,6 +164,40 @@ pub fn describe(err: &TransportError, operation: &str, profile_id: &str) -> User
             "Beim Empfangen ist ein Lesefehler aufgetreten.".into(),
             vec!["Adapter- oder Treiberfehler.".into(), "Die Verbindung wurde unterbrochen.".into()],
         ),
+        ErrorKind::Lsv2LinkTimeout => (
+            "Die CNC hat die LSV2-Verbindung nicht angenommen (keine Quittung DLE 0 auf ENQ).".into(),
+            vec![
+                "Die Steuerung ist nicht im Empfangs- bzw. Nachladebetrieb (an der CNC starten).".into(),
+                "Die Steuerung erwartet kein LSV2-Protokoll (Profil 'ohne Protokoll' verwenden).".into(),
+                "Baudrate, Parität oder Datenbits stimmen nicht - Zeichen werden nicht erkannt.".into(),
+                "Kabel/Adapter: RX/TX vertauscht oder nicht verbunden.".into(),
+            ],
+        ),
+        ErrorKind::Lsv2AckTimeout => (
+            "Die CNC hat ein Telegramm nicht quittiert.".into(),
+            vec![
+                "Die Steuerung hat den Empfang beendet oder wurde angehalten.".into(),
+                "Im Nachladebetrieb: Quittungs-Timeout kürzer als die Bearbeitungszeit eines Satzes.".into(),
+                "Telegrammaufbau (DLE-Transparenz, BCC) passt nicht zur Steuerung.".into(),
+            ],
+        ),
+        ErrorKind::Lsv2RetryExceeded => (
+            "LSV2-Übertragung nach mehreren Wiederholungen abgebrochen (NAK).".into(),
+            vec![
+                "Prüfsumme (BCC) wird von der Steuerung anders gebildet - BCC-Modus im Profil prüfen.".into(),
+                "Störungen auf der Leitung, falsche Parität.".into(),
+                "Telegramm zu lang für die Steuerung.".into(),
+            ],
+        ),
+        ErrorKind::CncAbort => (
+            format!("Die CNC hat die Übertragung beendet: {}", err.message),
+            vec![
+                "Bediener hat an der Steuerung abgebrochen oder das Programm gestoppt.".into(),
+                "Die Steuerung hat einen Fehler im Datenstrom erkannt.".into(),
+                "Speicher der Steuerung voll.".into(),
+            ],
+        ),
+        ErrorKind::Lsv2Protocol => ("LSV2-Protokollfehler.".into(), vec![err.message.clone()]),
     };
     let mut technical = format!("{:?}: {}", err.kind, err.message);
     let context: Vec<String> = [
@@ -186,6 +232,11 @@ mod tests {
             (ErrorKind::ConnectionLost, "unterbrochen"),
             (ErrorKind::Write, "Schreibfehler"),
             (ErrorKind::Read, "Lesefehler"),
+            (ErrorKind::Lsv2LinkTimeout, "DLE 0"),
+            (ErrorKind::Lsv2AckTimeout, "nicht quittiert"),
+            (ErrorKind::Lsv2RetryExceeded, "Wiederholungen"),
+            (ErrorKind::CncAbort, "CNC hat die Übertragung beendet"),
+            (ErrorKind::Lsv2Protocol, "LSV2-Protokollfehler"),
         ];
         for (kind, text) in kinds {
             let d = describe(&TransportError::new(kind, "x", "COM3"), "Senden", "p");
