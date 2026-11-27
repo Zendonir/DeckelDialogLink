@@ -60,6 +60,21 @@ pub enum ReceiveState {
 }
 
 impl ReceiveState {
+    /// Value as in the Python enum (metadata, JSON).
+    pub fn value(self) -> &'static str {
+        match self {
+            ReceiveState::Idle => "idle",
+            ReceiveState::OpeningPort => "opening_port",
+            ReceiveState::Listening => "listening",
+            ReceiveState::Receiving => "receiving",
+            ReceiveState::Finalizing => "finalizing",
+            ReceiveState::Completed => "completed",
+            ReceiveState::Cancelled => "cancelled",
+            ReceiveState::TimedOut => "timed_out",
+            ReceiveState::Failed => "failed",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             ReceiveState::Idle => "Bereit",
@@ -88,6 +103,19 @@ pub enum EndReason {
 }
 
 impl EndReason {
+    /// Value as in the Python enum (metadata, JSON).
+    pub fn value(self) -> &'static str {
+        match self {
+            EndReason::EndSequence => "end_sequence",
+            EndReason::Inactivity => "inactivity",
+            EndReason::MaxSize => "max_size",
+            EndReason::NoData => "no_data",
+            EndReason::Cancelled => "cancelled",
+            EndReason::Error => "error",
+            EndReason::Eot => "eot",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             EndReason::EndSequence => "Endsequenz erkannt",

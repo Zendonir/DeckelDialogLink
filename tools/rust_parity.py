@@ -1,4 +1,4 @@
-"""Differential test: Python and Rust implementation must analyse and prepare NC data identically.
+"""Differential test: Python and Rust must analyse/prepare NC data, run LSV2 and handle parameter files identically.
 
 Usage: python tools/rust_parity.py [--cases N] [--seed S] [--cli PATH]
 
@@ -32,6 +32,8 @@ from deckellink.domain.models import (
 from deckellink.domain.results import TrafficEvent
 from deckellink.nc.analyzer import analyze
 from deckellink.nc.transformer import transform
+from deckellink.parameters.fileformat import compatibility_problems, parse_parameter_file
+from deckellink.parameters.service import analyze_parameters, diff_parameters, prepare_parameter_payload
 from deckellink.profiles.loader import builtin_profiles_dir
 from deckellink.profiles.schema import parse_profile
 from deckellink.simulation.lsv2_cnc import Lsv2SimConfig, Lsv2SimulatedCnc
@@ -213,6 +215,171 @@ def python_lsv2(profile: Profile, mode: str, config: dict[str, Any]) -> dict[str
     }
 
 
+PARAM_HEADERS = [
+    b"%MPG00 (KOPF)",
+    b"%MPG01 (ACHSEN)",
+    b"%MPG02 (SPINDEL)",
+    b"%MPG01 (ACHSEN)  ",
+    b"%MDG00 (KOPF)",
+    b"%MDG03 (X)",
+    b"%MPG1 (KAPUTT)",
+    b"%MPG04 ()\t",
+]
+PARAM_LINES = [
+    b"M65001 V1.2",
+    b"M65002 SIM     0.000",
+    b"M65033 FP2A",
+    b"M65034 4711",
+    b"M00001 D1",
+    b"M00034 99",
+    b"M01001 5",
+    b"M01002",
+    b"M01003 -12.5",
+    b"M01001 5",
+    b"M1234 X",
+    b"M012345 1",
+    b"X01001 1",
+    b"M01004 \xe4",
+    b"M01005\t7",
+    b"M01006 1\x00",
+    b"",
+]
+CHECKSUMS = [b"AB12", b"00ff", b"C001", b"12345", b"XYZ1", b""]
+
+
+def random_parameter_file(rng: random.Random) -> bytes:
+    out = bytearray()
+    if rng.random() < 0.1:
+        out += b"VORSPANN\r\n"
+    for _ in range(rng.randint(0, 5)):
+        out += rng.choice(PARAM_HEADERS) + b"\r\n"
+        for _ in range(rng.randint(0, 80 if rng.random() < 0.2 else 8)):
+            out += rng.choice(PARAM_LINES) + rng.choice([b"\r\n", b"\r\n", b"\n", b"\r"])
+        if rng.random() < 0.85:
+            out += b"?\r\n"
+            if rng.random() < 0.9:
+                out += rng.choice(CHECKSUMS) + b"\r\n"
+    if rng.random() < 0.6:
+        out += b"\x04" + rng.choice([b"", b"\r\n"])
+    return bytes(out)
+
+
+def mutate_parameter_file(data: bytes, rng: random.Random) -> bytes:
+    lines = data.split(b"\r\n")
+    for _ in range(rng.randint(0, 6)):
+        if not lines:
+            break
+        index = rng.randrange(len(lines))
+        action = rng.random()
+        if action < 0.4:
+            lines[index] = rng.choice(PARAM_LINES + CHECKSUMS)
+        elif action < 0.6:
+            del lines[index]
+        elif action < 0.8:
+            lines.insert(index, rng.choice(PARAM_LINES))
+        else:
+            lines[index] = lines[index].replace(b"5", b"6")
+    return b"\r\n".join(lines)
+
+
+def python_param(profile: Profile, old: bytes, new: bytes) -> dict[str, Any]:
+    analysis = analyze_parameters(new, profile)
+    diff = diff_parameters(old, new, "alt", "neu")
+    before, after = parse_parameter_file(old), parse_parameter_file(new)
+    try:
+        payload = prepare_parameter_payload(new, profile)
+        payload_json: dict[str, Any] = {"ok": True, "data": payload.data.hex(), "applied": list(payload.applied)}
+    except DeckelLinkError as exc:
+        payload_json = {"ok": False, "error": str(exc)}
+    structure: dict[str, Any] | None = None
+    if after is not None:
+        structure = {
+            "kind": after.kind,
+            "groups": [
+                {"key": g.key, "label": g.label, "line": g.line, "lines": list(g.lines), "checksum": g.checksum}
+                for g in after.groups
+            ],
+            "header": [[k, v] for k, v in sorted(after.header.items())],
+            "eot": after.eot,
+            "summary": after.summary,
+            "software_versions": list(after.software_versions),
+            "machine_type": after.machine_type,
+            "machine_number": after.machine_number,
+            "date": after.date,
+            "findings": [finding_json(f) for f in after.findings],
+        }
+    return {
+        "findings": [finding_json(f) for f in analysis.findings],
+        "structure": structure,
+        "diff": {
+            "changed": diff.changed_lines,
+            "added": diff.added_lines,
+            "removed": diff.removed_lines,
+            "text": diff.diff_text,
+            "truncated": diff.truncated,
+        },
+        "problems": compatibility_problems(before, after) if before is not None and after is not None else None,
+        "payload": payload_json,
+    }
+
+
+def finding_json(f: Any) -> dict[str, Any]:
+    return {
+        "code": f.code,
+        "severity": f.severity.value,
+        "message": f.message,
+        "lines": list(f.lines),
+        "count": f.count,
+    }
+
+
+def parameter_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random) -> int:
+    base_json = json.loads((builtin_profiles_dir() / "dialog11_7n1_rtscts.json").read_text(encoding="utf-8"))
+    base, _ = parse_profile(base_json)
+    failures = 0
+    for case in range(cases):
+        profile = replace(
+            base,
+            parameters=replace(
+                base.parameters,
+                identification_pattern=rng.choice(["", "", "%MPG", "^%M[PD]G", "XYZ", "M650[0-9]{2}"]),
+                max_bytes=rng.choice([1_000_000, 1_000_000, 300]),
+            ),
+            transfer=replace(base.transfer, line_ending=rng.choice(list(LineEnding))),
+            serial=replace(base.serial, data_bits=rng.choice([7, 8])),
+        )
+        if case % 40 == 0:
+            # long files with many changes: autojunk heuristic and diff truncation (> 400 diff lines)
+            count = rng.randint(200, 700)
+            old = b"%MPG01 (LANG)\r\n" + b"".join(b"M01%03d %d\r\n" % (n % 1000, n % 7) for n in range(count))
+            new = b"%MPG01 (LANG)\r\n" + b"".join(
+                b"M01%03d %d\r\n" % (n % 1000, (n % 7) + (rng.random() < 0.4)) for n in range(count)
+            )
+        else:
+            old = random_parameter_file(rng)
+            new = mutate_parameter_file(old, rng) if rng.random() < 0.8 else random_parameter_file(rng)
+        paths = [tmp_dir / "param_profile.json", tmp_dir / "alt.par", tmp_dir / "neu.par"]
+        paths[0].write_text(json.dumps(profile.to_dict()), encoding="utf-8")
+        paths[1].write_bytes(old)
+        paths[2].write_bytes(new)
+        completed = subprocess.run([str(cli), "param-json", *map(str, paths)], capture_output=True, check=False)
+        if completed.returncode != 0:
+            failures += 1
+            print(f"param case {case}: CLI failed: {completed.stderr.decode(errors='replace')}")
+            continue
+        rust = json.loads(completed.stdout)
+        python = python_param(profile, old, new)
+        if rust != python:
+            failures += 1
+            if failures <= 5:
+                print(f"--- param case {case} differs\nold={old!r}\nnew={new!r}")
+                for key in python:
+                    if python[key] != rust.get(key):
+                        print(f"  {key}:\n    python={python[key]}\n    rust  ={rust.get(key)}")
+    print(f"{cases} parameter cases, {failures} differences")
+    return failures
+
+
 def lsv2_parity(cli: Path, tmp_dir: Path) -> int:
     lsv2_json = json.loads((builtin_profiles_dir() / "dialog11_lsv2_7e1.json").read_text(encoding="utf-8"))
     failures = 0
@@ -283,6 +450,7 @@ def main() -> int:
                             print(f"  {key}:\n    python={python[key]}\n    rust  ={rust.get(key)}")
         print(f"{args.cases} cases, {failures} differences")
         failures += lsv2_parity(args.cli, tmp_dir)
+        failures += parameter_parity(args.cli, tmp_dir, max(args.cases // 2, 50), rng)
     return 1 if failures else 0
 
 

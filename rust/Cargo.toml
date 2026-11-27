@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/deckellink-core", "crates/deckellink-cli"]
 
 [workspace.package]
-version = "0.8.0-alpha.2"
+version = "0.8.0-alpha.3"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT"

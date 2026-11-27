@@ -1,9 +1,12 @@
 //! DeckelLink command line.
 //!
-//! Stage 1: profiles, checks, preparation, sending and receiving (plain protocol).
+//! Profiles, checks, preparation, sending and receiving (plain and LSV2, drip-feed),
+//! machine parameter files (check, compare, read, write with all locks).
 //! A transfer to a real port is only started after a typed confirmation
 //! immediately before the transfer; nothing is ever sent automatically.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
+
+mod params;
 
 use std::io::BufRead;
 use std::path::PathBuf;
@@ -31,7 +34,7 @@ use deckellink_core::storage::{write_new_file, StorageError};
 use serde_json::json;
 
 const USAGE: &str = "\
-DeckelLink CLI (Rust, Etappe 1)
+DeckelLink CLI (Rust, Etappen 1-3)
 
 Verwendung:
   deckellink-cli profiles                         Mitgelieferte Profile anzeigen
@@ -46,6 +49,15 @@ Verwendung:
                                                    Reale Ports nur nach getippter Bestätigung.
   deckellink-cli receive <neue-datei> (--port COM3 | --tcp HOST:PORT | --rfc2217 HOST:PORT | --sim) [--profile ...]
                                                    Programm von der CNC empfangen (Ausgabe an der CNC starten)
+  deckellink-cli param-check <datei> [--profile ...]
+                                                   Maschinenparameterdatei prüfen (Gruppen, Prüfsummenzeilen)
+  deckellink-cli param-diff <alt> <neu>            Parameterdateien vergleichen
+  deckellink-cli param-read (--port ... | --sim) [--profile ...] [--archiv DIR]
+                                                   Parameterausgabe der CNC sichern (DIR/parameters, nie überschrieben)
+  deckellink-cli param-write <datei> (--port ... | --sim) --freischalten [--profile ...] [--archiv DIR]
+                                                   Parameter schreiben: nur mit Profilfreigabe, Freischaltung,
+                                                   frischer Sicherung, Vergleich, getippter Bestätigung
+                                                   und anschließender Kontrolle durch erneutes Auslesen
   deckellink-cli analyze-json <profil.json> <datei>
                                                    Maschinenlesbare Analyse (Gleichwertigkeitstests)
 
@@ -132,6 +144,11 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         "send" => send(rest),
         "receive" => receive(rest),
         "lsv2-trace" => lsv2_trace(rest),
+        "param-check" => params::param_check(rest),
+        "param-diff" => params::param_diff(rest),
+        "param-read" => params::param_read(rest),
+        "param-write" => params::param_write(rest),
+        "param-json" => params::param_json(rest),
         "analyze-json" => {
             let [profile_file, file] = rest else {
                 return Err(USAGE.into());
@@ -141,14 +158,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             let data = std::fs::read(file).map_err(|e| e.to_string())?;
             let analysis = analyze(&data, &profile.transfer, Some(&profile.serial));
             let prepared = transform(&data, &profile.transfer, true);
-            let findings: Vec<_> = analysis
-                .findings
-                .iter()
-                .map(|f| {
-                    json!({"code": f.code, "severity": f.severity.as_str(), "message": f.message,
-                                "lines": f.lines, "count": f.count})
-                })
-                .collect();
+            let findings: Vec<_> = analysis.findings.iter().map(finding_value).collect();
             let transform_json = match prepared {
                 Ok(t) => json!({"ok": true, "data": hex(&t.data), "line_count": t.line_count,
                                 "offsets": t.line_end_offsets, "applied": t.applied,
@@ -174,6 +184,10 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         other => Err(format!("Unbekannter Befehl '{other}'\n\n{USAGE}")),
     }
+}
+
+fn finding_value(f: &deckellink_core::nc::Finding) -> serde_json::Value {
+    json!({"code": f.code, "severity": f.severity.as_str(), "message": f.message, "lines": f.lines, "count": f.count})
 }
 
 fn hex(data: &[u8]) -> String {
@@ -253,6 +267,8 @@ struct Options {
     tcp: Option<String>,
     rfc2217: Option<String>,
     sim: bool,
+    archive: Option<String>,
+    unlock: bool,
     drip: bool,
 }
 
@@ -266,6 +282,8 @@ fn parse_options(args: &[String]) -> Result<Options, String> {
             "--tcp" => options.tcp = Some(iter.next().ok_or("--tcp ohne Wert")?.clone()),
             "--rfc2217" => options.rfc2217 = Some(iter.next().ok_or("--rfc2217 ohne Wert")?.clone()),
             "--sim" => options.sim = true,
+            "--archiv" => options.archive = Some(iter.next().ok_or("--archiv ohne Wert")?.clone()),
+            "--freischalten" => options.unlock = true,
             "--drip" => options.drip = true,
             _ => options.positional.push(arg.clone()),
         }

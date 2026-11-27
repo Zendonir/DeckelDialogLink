@@ -15,6 +15,7 @@ pub mod clock;
 pub mod error;
 pub mod model;
 pub mod nc;
+pub mod parameters;
 pub mod profile;
 pub mod storage;
 pub mod transfer;

@@ -2,6 +2,17 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.3] – 2026-11-27
+
+### Hinzugefügt (Rust, Etappe 3)
+- **Maschinenparameter**: Die Dateistruktur wird wie in Python geprüft: Gruppen %MPGnn/%MDGnn, Gruppenende „?“, Prüfsummenzeile, Kopfgruppe mit Softwarestand und Maschinennummer, EOT. Das Prüfsummenverfahren bleibt unbekannt und wird nie berechnet.
+- **Vergleich** zeilengenau mit denselben Ergebnissen wie Pythons `difflib`, einschließlich Diff-Text.
+- **Archiv** für ausgelesene Parametersätze mit Metadaten und Rohdaten. Dateien werden nie überschrieben.
+- **Schreibsperren** unverändert wie in Python: Profilfreigabe, Freischaltung nur für die Sitzung, frische Sicherung, fehlerfreie Datei, Vergleich, Format-, Softwarestand- und Prüfsummensperre, getippte Bestätigung `PARAMETER SCHREIBEN`, Kontrolle durch erneutes Auslesen.
+- Lesen und Schreiben von Parametern ohne Protokoll und über LSV2, nie im Nachladebetrieb.
+- Kommandozeile: `param-check`, `param-diff`, `param-read`, `param-write`.
+- Gleichwertigkeitstest um zufällige und veränderte Parameterdateien erweitert, darunter lange Dateien mit gekürztem Diff. 0 Abweichungen.
+
 ## [Rust 0.8.0-alpha.2] – 2026-11-27
 
 ### Hinzugefügt (Rust, Etappe 2)
