@@ -160,6 +160,8 @@ pub struct AppConfig {
     pub last_open_dir: String,
     pub recent_files: Vec<String>,
     pub font_scale_percent: u64,
+    /// Recording used by the replay scenario ("" = sample program).
+    pub simulation_replay_file: String,
     /// All keys of the file, including those only the Python version knows.
     pub extra: Map<String, Value>,
 }
@@ -181,6 +183,7 @@ impl Default for AppConfig {
             last_open_dir: String::new(),
             recent_files: Vec::new(),
             font_scale_percent: 100,
+            simulation_replay_file: String::new(),
             extra: Map::new(),
         }
     }
@@ -219,6 +222,7 @@ impl AppConfig {
                         "active_profile_id" => config.active_profile_id = text,
                         "log_level" => config.log_level = text,
                         "last_open_dir" => config.last_open_dir = text,
+                        "simulation_replay_file" => config.simulation_replay_file = text,
                         _ => match ConnectionKind::parse(&text) {
                             Some(kind) => config.connection_kind = kind,
                             None => warnings.push(format!("Unbekannte Verbindungsart '{text}'")),
@@ -284,6 +288,7 @@ impl AppConfig {
             "last_open_dir": self.last_open_dir,
             "recent_files": self.recent_files,
             "font_scale_percent": self.font_scale_percent,
+            "simulation_replay_file": self.simulation_replay_file,
         });
         if let Value::Object(known) = known {
             for (key, value) in known {

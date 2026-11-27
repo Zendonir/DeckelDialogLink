@@ -139,7 +139,7 @@ fn notice_box(ui: &mut Ui, text: &str, fill: Color32, stroke: Color32) {
 pub fn show(app: &mut DeckelApp, ui: &mut Ui) {
     egui::Panel::top("header").show(ui, |ui| header(app, ui));
     egui::Panel::bottom("statusbar").show(ui, |ui| statusbar(app, ui));
-    egui::Panel::left("nav").resizable(false).exact_size(190.0).show(ui, |ui| navigation(app, ui));
+    egui::Panel::left("nav").resizable(false).exact_size(200.0).show(ui, |ui| navigation(app, ui));
     egui::CentralPanel::default().show(ui, |ui| {
         ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match app.page {
             Page::Transfer => transfer_page(app, ui),
@@ -150,9 +150,12 @@ pub fn show(app: &mut DeckelApp, ui: &mut Ui) {
             Page::Diagnostics => diagnostics_page(app, ui),
             Page::Settings => settings_page(app, ui),
             Page::Log => log_page(app, ui),
+            Page::Commissioning => crate::ui_extra::commissioning_page(app, ui),
+            Page::Help => crate::ui_extra::help_page(app, ui),
         });
     });
     dialogs(app, ui.ctx());
+    crate::ui_extra::dropped_files(app, ui.ctx());
 }
 
 fn header(app: &mut DeckelApp, ui: &mut Ui) {
@@ -646,7 +649,7 @@ fn diagnostics_page(app: &mut DeckelApp, ui: &mut Ui) {
     for warning in safety_warnings(&app.profile) {
         ui.label(RichText::new(format!("Warnung: {warning}")).color(status_color(StatusKind::Warning)));
     }
-    for problem in &app.profile_problems {
+    for problem in &app.store.problems {
         ui.label(RichText::new(format!("Profilproblem: {problem}")).color(status_color(StatusKind::Error)));
     }
     ui.separator();
@@ -654,6 +657,7 @@ fn diagnostics_page(app: &mut DeckelApp, ui: &mut Ui) {
     ui.label(format!("DeckelLink {} (Rust)", env!("CARGO_PKG_VERSION")));
     ui.label(format!("Datenordner: {}", app.paths.root.display()));
     ui.label(format!("Protokolle: {}", app.paths.logs.display()));
+    crate::ui_extra::diagnostics_tools(app, ui);
 }
 
 fn settings_page(app: &mut DeckelApp, ui: &mut Ui) {
@@ -683,6 +687,7 @@ fn settings_page(app: &mut DeckelApp, ui: &mut Ui) {
             }
         });
         ui.label(RichText::new(format!("{} ({})", current.description, current.kind.label())).small());
+        crate::ui_extra::replay_selection(app, ui);
     }
     ui.separator();
     ui.label(RichText::new("Verbindung für den Realbetrieb").strong());
@@ -733,17 +738,15 @@ fn settings_page(app: &mut DeckelApp, ui: &mut Ui) {
         egui::ComboBox::from_id_salt("profile").selected_text(app.profile.display_name.clone()).width(420.0).show_ui(
             ui,
             |ui| {
-                for profile in app.profiles.clone() {
+                for profile in app.store.profiles().to_vec() {
                     if ui.selectable_label(profile.id == app.profile.id, &profile.display_name).clicked() {
                         app.push(Action::SelectProfile(profile.id.clone()));
                     }
                 }
             },
         );
-        if ui.button("Profil importieren …").clicked() {
-            app.push(Action::ImportProfileDialog);
-        }
     });
+    crate::ui_extra::profile_tools(app, ui);
     let p = &app.profile;
     ui.label(format!(
         "{} | Protokoll {} | Zeilenende {} | Programmende '{}' | Status: {}",
@@ -822,6 +825,8 @@ fn dialogs(app: &mut DeckelApp, ctx: &egui::Context) {
             Dialog::ParamUnlock => param_unlock(app, ui),
             Dialog::ParamWrite { phrase, ack } => param_write(app, ui, phrase, ack),
             Dialog::RealMode => real_mode(app, ui),
+            Dialog::DeleteProfile => crate::ui_extra::delete_profile_dialog(app, ui),
+            Dialog::MarkVerified => crate::ui_extra::mark_verified_dialog(app, ui),
         }
     });
     if modal.should_close() {

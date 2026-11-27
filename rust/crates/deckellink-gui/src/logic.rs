@@ -6,16 +6,20 @@ use std::sync::Arc;
 
 use deckellink_core::appdata::{AppConfig, ConnectionKind};
 use deckellink_core::clock::{Clock, SystemClock};
+use deckellink_core::diagnostics::{capture_settings, encode_frames_as_8n1};
+use deckellink_core::model::Parity;
 use deckellink_core::model::Profile;
 use deckellink_core::nc::analyzer::analyze;
 use deckellink_core::nc::transformer::transform;
 use deckellink_core::nc::{AnalysisResult, TransformResult};
 use deckellink_core::parameters::sample_parameters;
-use deckellink_core::scenarios::{get_scenario, lsv2_config_for, SAMPLE_PROGRAM};
+use deckellink_core::scenarios::{get_scenario, lsv2_config_for, REPLAY_SCENARIO_ID, SAMPLE_PROGRAM};
+use deckellink_core::transport::loopback::LoopbackTransport;
 use deckellink_core::transport::lsv2_sim::Lsv2SimulatedCnc;
 use deckellink_core::transport::rfc2217::Rfc2217Transport;
 use deckellink_core::transport::serial::SerialTransport;
 use deckellink_core::transport::simulated::SimulatedTransport;
+use deckellink_core::transport::simulated::SimulationConfig;
 use deckellink_core::transport::tcp::TcpTransport;
 use deckellink_core::transport::Transport;
 
@@ -191,12 +195,24 @@ pub enum Purpose {
     Receive,
     ParamRead,
     ParamWrite,
+    Loopback,
+    FormatDetect,
 }
 
 impl Purpose {
     fn receiving(self) -> bool {
         matches!(self, Purpose::Receive | Purpose::ParamRead)
     }
+}
+
+/// Bytes of the recording for the replay scenario (`Ok(None)` if no recording is selected).
+pub fn replay_data(config: &AppConfig) -> Result<Option<Vec<u8>>, String> {
+    if config.simulation_scenario != REPLAY_SCENARIO_ID || config.simulation_replay_file.is_empty() {
+        return Ok(None);
+    }
+    std::fs::read(&config.simulation_replay_file)
+        .map(|data| if data.is_empty() { None } else { Some(data) })
+        .map_err(|e| format!("Aufzeichnung nicht lesbar ({e}) - Beispielprogramm wird verwendet"))
 }
 
 /// Connection target of the real connection ("" if not configured).
@@ -233,21 +249,45 @@ pub fn real_port_label(config: &AppConfig) -> String {
 }
 
 /// Create the transport for `purpose`: the simulator in simulation mode, otherwise the configured connection.
-pub fn make_transport(config: &AppConfig, profile: &Profile, purpose: Purpose) -> Box<dyn Transport> {
-    let serial = profile.serial.clone();
+/// `replay` replaces the data the simulated CNC sends (replay scenario).
+pub fn make_transport(
+    config: &AppConfig,
+    profile: &Profile,
+    purpose: Purpose,
+    replay: Option<&[u8]>,
+) -> Box<dyn Transport> {
+    let mut serial = profile.serial.clone();
+    if purpose == Purpose::FormatDetect {
+        serial = capture_settings(&serial);
+    }
     if config.simulation_mode {
         let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
+        if purpose == Purpose::Loopback {
+            return Box::new(LoopbackTransport::new(serial, clock));
+        }
+        if purpose == Purpose::FormatDetect {
+            let stream =
+                replay.map_or_else(|| encode_frames_as_8n1(&SAMPLE_PROGRAM.repeat(4), Parity::Even), <[u8]>::to_vec);
+            let sim = SimulationConfig { machine_program: stream, ..SimulationConfig::default() };
+            return Box::new(SimulatedTransport::new(serial, sim, clock));
+        }
         let scenario = get_scenario(&config.simulation_scenario);
         if profile.protocol.is_lsv2() {
             let mut lsv2 = lsv2_config_for(&scenario, purpose.receiving(), purpose == Purpose::DripFeed);
             if purpose == Purpose::ParamRead {
                 lsv2.program = sample_parameters();
             }
+            if let (Some(data), true) = (replay, purpose.receiving()) {
+                lsv2.program = data.to_vec();
+            }
             return Box::new(Lsv2SimulatedCnc::new(serial, profile.protocol.clone(), lsv2, clock));
         }
         let mut sim = scenario.config.clone();
         if purpose == Purpose::ParamRead {
             sim.machine_program = sample_parameters();
+        }
+        if let (Some(data), true) = (replay, purpose.receiving()) {
+            sim.machine_program = data.to_vec();
         }
         if purpose == Purpose::Receive && sim.machine_program.is_empty() {
             sim.machine_program = SAMPLE_PROGRAM.to_vec();
@@ -315,11 +355,11 @@ mod tests {
         assert_eq!(port_label(&config), "SIMULATOR");
         config.port = "COM7".into();
         assert_eq!(real_port_label(&config), "COM7");
-        assert!(make_transport(&config, &p, Purpose::Receive).is_simulated());
+        assert!(make_transport(&config, &p, Purpose::Receive, None).is_simulated());
         config.simulation_mode = false;
         config.port = "COM3".into();
         assert_eq!(port_label(&config), "COM3");
-        assert!(!make_transport(&config, &p, Purpose::Send).is_simulated());
+        assert!(!make_transport(&config, &p, Purpose::Send, None).is_simulated());
         config.connection_kind = ConnectionKind::Rfc2217;
         assert_eq!(connection_target(&config), "");
         config.network_host = "10.0.0.5".into();

@@ -12,6 +12,7 @@ pub const INVALID_PROGRAM: &[u8] =
     b"(PROGRAMM MIT UNG\xdcLTIGEN ZEICHEN)\r\nN10 G90\r\nN20 G00 X10 Y10 \x1b\r\nN30 M30\r\n";
 
 pub const DEFAULT_SCENARIO_ID: &str = "send_ok";
+pub const REPLAY_SCENARIO_ID: &str = "replay";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScenarioKind {
@@ -267,6 +268,13 @@ pub fn scenarios() -> Vec<Scenario> {
                 ..Lsv2SimConfig::default()
             },
         ),
+        plain(
+            REPLAY_SCENARIO_ID,
+            "Aufzeichnung abspielen (echte Rohdaten)",
+            "Die simulierte CNC sendet beim Empfang (und beim Mitlesen des Datenformats) die Bytes einer gewählten Aufzeichnung, z. B. einer Rohdaten-Datei aus dem Ordner 'raw' nach dem ersten echten Empfang. Bei LSV2-Profilen wird der Inhalt als Telegramme neu erzeugt.",
+            Receive,
+            SimulationConfig::default(),
+        ),
     ]
 }
 
@@ -310,11 +318,11 @@ mod tests {
     #[test]
     fn scenario_list() {
         let all = scenarios();
-        assert_eq!(all.len(), 23);
+        assert_eq!(all.len(), 24);
         let mut ids: Vec<&str> = all.iter().map(|s| s.id).collect();
         ids.sort_unstable();
         ids.dedup();
-        assert_eq!(ids.len(), 23);
+        assert_eq!(ids.len(), 24);
         assert_eq!(get_scenario("unbekannt").id, DEFAULT_SCENARIO_ID);
         let drip = lsv2_config_for(&get_scenario("send_ok"), false, true);
         assert_eq!((drip.buffer_telegrams, drip.program.len()), (4, 0));

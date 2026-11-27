@@ -380,6 +380,46 @@ def parameter_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random) -
     return failures
 
 
+def diagnostics_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random) -> int:
+    """Format detection (analyze_capture) and loopback test patterns."""
+    from deckellink.diagnostics.format_detect import analyze_capture, encode_frames_as_8n1
+    from deckellink.diagnostics.loopback_test import LoopbackPattern, make_pattern
+    from deckellink.domain.models import Parity
+
+    failures = 0
+    for case in range(cases):
+        text = b"".join(rng.choice(PIECES) + b"\r\n" for _ in range(rng.randint(0, 40)))
+        data = encode_frames_as_8n1(text, rng.choice(list(Parity))) if rng.random() < 0.8 else text
+        noisy = bytearray(data)
+        for _ in range(rng.choice([0, 0, 1, 3, 20])):
+            if noisy:
+                noisy[rng.randrange(len(noisy))] = rng.randrange(256)
+        capture = bytes(noisy)
+        length, bits = rng.randint(1, 300), rng.choice([5, 6, 7, 8])
+        path = tmp_dir / "capture.bin"
+        path.write_bytes(capture)
+        completed = subprocess.run(
+            [str(cli), "diag-json", str(path), str(length), str(bits)], capture_output=True, check=False
+        )
+        rust = json.loads(completed.stdout) if completed.returncode == 0 else {"error": completed.stderr.decode()}
+        guess = analyze_capture(capture)
+        python = {
+            "report": guess.report(),
+            "frame": guess.frame,
+            "confidence": guess.confidence,
+            "patterns": [[p.hex() for p in make_pattern(kind, length, bits)] for kind in LoopbackPattern],
+        }
+        if rust != python:
+            failures += 1
+            if failures <= 5:
+                print(f"--- diagnostics case {case} differs (length={length}, bits={bits}, capture={capture!r})")
+                for key, value in python.items():
+                    if value != rust.get(key):
+                        print(f"  {key}:\n    python={value}\n    rust  ={rust.get(key)}")
+    print(f"{cases} diagnostics cases, {failures} differences")
+    return failures
+
+
 def lsv2_parity(cli: Path, tmp_dir: Path) -> int:
     lsv2_json = json.loads((builtin_profiles_dir() / "dialog11_lsv2_7e1.json").read_text(encoding="utf-8"))
     failures = 0
@@ -451,6 +491,7 @@ def main() -> int:
         print(f"{args.cases} cases, {failures} differences")
         failures += lsv2_parity(args.cli, tmp_dir)
         failures += parameter_parity(args.cli, tmp_dir, max(args.cases // 2, 50), rng)
+        failures += diagnostics_parity(args.cli, tmp_dir, max(args.cases // 4, 50), rng)
     return 1 if failures else 0
 
 

@@ -3,9 +3,9 @@ resolver = "2"
 members = ["crates/deckellink-core", "crates/deckellink-cli", "crates/deckellink-gui"]
 
 [workspace.package]
-version = "0.8.0-alpha.4"
+version = "0.8.0-alpha.5"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.95"
 license = "MIT"
 repository = "https://github.com/zendonir/deckeldialoglink"
 

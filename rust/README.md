@@ -9,7 +9,7 @@ Ziel ist **maximale Programmstabilität**: eine einzelne Windows-`.exe` ohne Pyt
 - Ganzzahlüberläufe werden auch im Release-Build geprüft (`overflow-checks = true`).
 - CI-Gates: `cargo fmt --check`, `cargo clippy -- -D warnings`, Tests unter Linux und Windows.
 - **Eigenschaftstests (proptest):** Zufällige Bytes, Profile und Programme dürfen nie zu Abstürzen führen. Senden und Empfangen über die simulierte CNC liefert bitgenau dieselben Daten.
-- **Gleichwertigkeitstest mit Python:** `tools/rust_parity.py` vergleicht Prüfung und Aufbereitung beider Versionen über Tausende Zufallsdateien und Profilvarianten. Für Maschinenparameter vergleicht er Struktur, Befunde, Diff-Zählung und Diff-Text sowie die Schreibsperren. Dafür erzeugt er Tausende zufällige und veränderte Parameterdateien. Für LSV2 vergleicht er außerdem 14 Szenarien Byte für Byte: gesendete und empfangene Bytes, Endzustand, Daten und Dauer. Die Szenarien decken NAK, verlorene Quittung, WACK, EOT durch die CNC, Verbindungsabbruch, BCC-Varianten, Start- und Endtelegramme sowie den Empfang mit fehlerhafter Prüfsumme ab. Dieser Test hat bereits einen Meldungsfehler in der Python-Version gefunden: „215 Bytes. Grenze“ statt „215 Bytes, Grenze“.
+- **Gleichwertigkeitstest mit Python:** `tools/rust_parity.py` vergleicht Prüfung und Aufbereitung beider Versionen über Tausende Zufallsdateien und Profilvarianten. Für Maschinenparameter vergleicht er Struktur, Befunde, Diff-Zählung und Diff-Text sowie die Schreibsperren. Dafür erzeugt er Tausende zufällige und veränderte Parameterdateien. Erkennung des Datenformats und Loopback-Prüfmuster prüft er ebenfalls mit Zufallsdaten. Für LSV2 vergleicht er außerdem 14 Szenarien Byte für Byte: gesendete und empfangene Bytes, Endzustand, Daten und Dauer. Die Szenarien decken NAK, verlorene Quittung, WACK, EOT durch die CNC, Verbindungsabbruch, BCC-Varianten, Start- und Endtelegramme sowie den Empfang mit fehlerhafter Prüfsumme ab. Dieser Test hat bereits einen Meldungsfehler in der Python-Version gefunden: „215 Bytes. Grenze“ statt „215 Bytes, Grenze“.
 
 ## Aufbau
 
@@ -53,11 +53,21 @@ Diese Sicherheitsregeln gelten wie in Python:
 - Stürzt der Hintergrundvorgang ab, wird das als Fehler gemeldet. Das Programm selbst läuft weiter.
 - Maschinenparameter: Es gelten alle Schreibsperren aus Etappe 3. Die Freischaltung gilt nur für die laufende Sitzung.
 
-Diese Funktionen der Python-Oberfläche fehlen noch:
-- Profileditor; Profile können vorerst nur importiert werden.
-- Loopback-Test, Erkennung des Datenformats und Export der Diagnose.
-- Szenario „Aufzeichnung abspielen“, Inbetriebnahme-Assistent, Hilfe, Drag & Drop.
-- DIALOG-11-Simulator und Programmverwaltung (Etappen 5 und 6).
+Außerdem enthält die Oberfläche:
+- **Profileditor:** Mitgelieferte Profile werden nie überschrieben; beim Speichern entsteht ein Benutzerprofil. Technische Änderungen setzen den Status auf „nicht verifiziert“. Kopieren, Löschen (mit Sicherung), Import und Export sind möglich.
+- **Diagnose:**
+  - Loopback-Test mit vier Prüfmustern.
+  - Datenformat mitlesen: Es wird nur empfangen, nie gesendet. Die Auswertung schätzt Parität und Datenbits.
+  - Diagnosepaket als ZIP mit maskierten Pfaden; NC-Dateien sind nur auf Wunsch dabei.
+- **Simulationsszenario „Aufzeichnung abspielen“** mit echten Rohdaten.
+- **Inbetriebnahme-Assistent:**
+  - 14 Schritte, Stand je Profil, Protokoll als Markdown.
+  - „Verifiziert“ lässt sich nur setzen, wenn alle Pflichtschritte erledigt sind und ein Prüfer eingetragen ist; dabei entsteht eine Profilkopie.
+  - Ergebnisse aus dem Realbetrieb werden automatisch eingetragen.
+- **Hilfe:** Die Dokumentation aus `README.md` und `docs/` ist ins Programm eingebaut.
+- **Drag & Drop:** Eine Datei auf das Fenster ziehen lädt sie, gesendet wird nichts.
+
+Noch nicht in Rust: DIALOG-11-Simulator und Programmverwaltung (Etappen 5 und 6) sowie der Windows-Installer.
 
 Tests:
 - `tests/flows.rs` prüft die Abläufe ohne Fenster: Jedes Bild wird mit egui gezeichnet, die Aktionen sind dieselben wie bei den Schaltflächen.
@@ -116,8 +126,8 @@ cargo build --release      # target/release/deckellink(.exe) und deckellink-cli(
 | 1 | Profile, NC-Prüfung/-Aufbereitung, Ports (seriell, TCP), Simulator, Senden/Empfangen, CLI, CI, Gleichwertigkeitstest | **fertig** |
 | 2 | LSV2-Protokoll und Nachladebetrieb, simulierte LSV2-CNC, RFC 2217; Gleichwertigkeit auf Byte-Ebene (14 LSV2-Szenarien) | **fertig** |
 | 3 | Maschinenparameter (Dateistruktur, Vergleich, Archiv, Schreibsperren, Kontrolle); Gleichwertigkeit für Zufalls-Parameterdateien inkl. Diff-Texten | **fertig** |
-| 4 | Oberfläche (egui): Übertragen, Empfangen, NC-Programme, Maschinenparameter, Terminal, Diagnose, Einstellungen, Protokoll | **fertig** (Restpunkte siehe oben) |
+| 4 | Oberfläche (egui) mit allen Seiten, Profileditor, Diagnose (Loopback, Formaterkennung, Diagnosepaket), Aufzeichnung abspielen, Inbetriebnahme-Assistent, Hilfe | **fertig** |
 | 5 | DIALOG-11-Simulator mit Grafik und Steuerungsmenüs | offen |
 | 6 | Programm- und Werkzeugverwaltung, Inbetriebnahme-Assistent, Windows-Installer | offen |
 
-Die Rust-Oberfläche ist für Senden, Empfangen und Parameter benutzbar. Bis alle Funktionen gleichwertig sind (Restpunkte oben, Etappen 5 und 6), bleibt die Python-Version die vollständige Anwendung.
+Die Rust-Oberfläche deckt alles außer dem DIALOG-11-Simulator und der Programmverwaltung ab. Bis die Etappen 5 und 6 fertig sind, bleibt die Python-Version die vollständige Anwendung.

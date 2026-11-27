@@ -15,6 +15,7 @@ regex = { version = "1", default-features = false, features = ["std", "perf", "u
 serde_json = { version = "1", features = ["preserve_order"] }
 serialport = { version = "4", default-features = false }
 sha2 = "0.10"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 thiserror = "2"
 
 [dev-dependencies]

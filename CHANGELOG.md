@@ -2,6 +2,28 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.5] – 2026-11-27
+
+### Hinzugefügt (Rust, Etappe 4 abgeschlossen)
+- **Profileditor:** alle Profilbereiche lassen sich bearbeiten.
+  - Mitgelieferte Profile werden nie überschrieben; beim Speichern entsteht ein Benutzerprofil.
+  - Technische Änderungen setzen den Status auf „nicht verifiziert“.
+  - Kopieren, Löschen mit Sicherung, Import mit neuer ID bei Doppelung, Export.
+- **Diagnose:**
+  - Loopback-Test.
+  - Datenformat mitlesen; es wird nur empfangen.
+  - Diagnosepaket als ZIP mit maskierten Pfaden; NC-Dateien sind nur auf Wunsch dabei.
+- **Simulationsszenario „Aufzeichnung abspielen“.**
+- **Inbetriebnahme-Assistent:**
+  - Dateiformat identisch zu Python, Protokoll als Markdown.
+  - „Verifiziert“ nur, wenn alle Pflichtschritte erledigt sind und ein Prüfer eingetragen ist.
+- **Hilfe:** Handbuch im Programm.
+- **Drag & Drop:** lädt die Datei, sendet nie.
+- **Gleichwertigkeitstest:** zusätzlich Formaterkennung und Loopback-Prüfmuster, 0 Abweichungen.
+
+### Geändert
+- Mindest-Rust-Version auf 1.95 angehoben (von den Bibliotheken vorgegeben).
+
 ## [Rust 0.8.0-alpha.4] – 2026-11-27
 
 ### Hinzugefügt (Rust, Etappe 4)

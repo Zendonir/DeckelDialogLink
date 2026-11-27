@@ -85,11 +85,14 @@ impl Transport for LoopbackTransport {
         }
         for &byte in data {
             self.counter += 1;
-            if self.drop_every > 0 && self.counter % self.drop_every == 0 {
+            if self.drop_every > 0 && self.counter.is_multiple_of(self.drop_every) {
                 continue;
             }
-            let value =
-                if self.corrupt_every > 0 && self.counter % self.corrupt_every == 0 { byte ^ 0x01 } else { byte };
+            let value = if self.corrupt_every > 0 && self.counter.is_multiple_of(self.corrupt_every) {
+                byte ^ 0x01
+            } else {
+                byte
+            };
             self.buffer.push_back(value);
         }
         Ok(data.len())

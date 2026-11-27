@@ -149,6 +149,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         "param-read" => params::param_read(rest),
         "param-write" => params::param_write(rest),
         "param-json" => params::param_json(rest),
+        "diag-json" => diag_json(rest),
         "analyze-json" => {
             let [profile_file, file] = rest else {
                 return Err(USAGE.into());
@@ -184,6 +185,25 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         other => Err(format!("Unbekannter Befehl '{other}'\n\n{USAGE}")),
     }
+}
+
+/// Hidden: `diag-json <capture-file> <length> <data-bits>` - format guess and loopback patterns (parity test).
+fn diag_json(args: &[String]) -> Result<ExitCode, String> {
+    use deckellink_core::diagnostics::{analyze_capture, make_pattern, LoopbackPattern};
+    let [file, length, bits] = args else { return Err(USAGE.into()) };
+    let data = std::fs::read(file).map_err(|e| e.to_string())?;
+    let length: usize = length.parse().map_err(|_| "Länge ungültig".to_string())?;
+    let bits: u8 = bits.parse().map_err(|_| "Datenbits ungültig".to_string())?;
+    let guess = analyze_capture(&data);
+    let patterns: Vec<Vec<String>> = LoopbackPattern::ALL
+        .iter()
+        .map(|p| make_pattern(*p, length, bits).iter().map(|packet| hex(packet)).collect())
+        .collect();
+    println!(
+        "{}",
+        json!({"report": guess.report(), "frame": guess.frame(), "confidence": guess.confidence, "patterns": patterns})
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 fn finding_value(f: &deckellink_core::nc::Finding) -> serde_json::Value {

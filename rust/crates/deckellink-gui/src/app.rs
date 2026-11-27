@@ -14,7 +14,7 @@ use deckellink_core::parameters::{
     diff_parameters, evaluate_parameter_write_gate, parameter_profile, GateInput, ParameterBackupInfo,
     ParameterCandidate, ParameterDiff, ParameterWriteGate,
 };
-use deckellink_core::profile::{builtin_profiles, parse_profile_text, profile_to_json};
+use deckellink_core::profilestore::ProfileStore;
 use deckellink_core::scenarios::get_scenario;
 use deckellink_core::storage::{unique_path, write_new_file};
 use deckellink_core::transfer::lsv2_transfer::{Lsv2ProgramReceiver, Lsv2ProgramSender};
@@ -29,8 +29,8 @@ use deckellink_core::transport::ModemStatus;
 
 use crate::applog::{AppLog, Level, LOG_FILE};
 use crate::logic::{
-    connection_target, evaluate_receive_gate, evaluate_send_gate, hex_line, make_transport, port_label, sample_file,
-    Gate, LoadedProgram, Purpose,
+    connection_target, evaluate_receive_gate, evaluate_send_gate, hex_line, port_label, sample_file, Gate,
+    LoadedProgram, Purpose,
 };
 use crate::worker::{Outcome, RunningTask, TaskKind};
 
@@ -44,10 +44,12 @@ pub enum Page {
     Diagnostics,
     Settings,
     Log,
+    Commissioning,
+    Help,
 }
 
 impl Page {
-    pub const ALL: [Page; 8] = [
+    pub const ALL: [Page; 10] = [
         Page::Transfer,
         Page::Receive,
         Page::Programs,
@@ -56,6 +58,8 @@ impl Page {
         Page::Diagnostics,
         Page::Settings,
         Page::Log,
+        Page::Commissioning,
+        Page::Help,
     ];
 
     pub fn label(self) -> &'static str {
@@ -68,6 +72,8 @@ impl Page {
             Page::Diagnostics => "Diagnose",
             Page::Settings => "Einstellungen",
             Page::Log => "Protokoll",
+            Page::Commissioning => "Inbetriebnahme",
+            Page::Help => "Hilfe",
         }
     }
 }
@@ -116,6 +122,23 @@ pub enum Action {
     SaveConfig,
     RefreshPorts,
     ClearTerminal,
+    EditProfile,
+    CancelEdit,
+    SaveDraft,
+    DuplicateProfile,
+    RequestDeleteProfile,
+    ConfirmDeleteProfile,
+    ExportProfileDialog,
+    StartLoopback,
+    StartFormatDetect,
+    ExportDiagnostics,
+    ReplayFileDialog,
+    CommSetStatus(String, deckellink_core::commissioning::StepStatus),
+    CommSave,
+    CommExport,
+    CommRequestVerify,
+    CommConfirmVerify,
+    DroppedFile(PathBuf),
 }
 
 /// Open modal dialog.
@@ -125,6 +148,8 @@ pub enum Dialog {
     ParamUnlock,
     ParamWrite { phrase: String, ack: bool },
     RealMode,
+    DeleteProfile,
+    MarkVerified,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -157,8 +182,7 @@ pub struct DeckelApp {
     pub ctx: egui::Context,
     pub paths: AppPaths,
     pub config: AppConfig,
-    pub profiles: Vec<Profile>,
-    pub profile_problems: Vec<String>,
+    pub store: ProfileStore,
     pub profile: Profile,
     pub page: Page,
     pub log: AppLog,
@@ -188,6 +212,7 @@ pub struct DeckelApp {
     pub modem: Option<ModemStatus>,
     pub ports: Vec<PortInfo>,
     pub log_filter: Level,
+    pub extra: crate::app_extra::ExtraState,
 }
 
 impl std::fmt::Debug for DeckelApp {
@@ -200,46 +225,13 @@ fn file_name(path: &Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-/// Built-in profiles plus valid user profiles from `profiles/` (problems are reported, never fatal).
-pub fn load_profiles(dir: &Path) -> (Vec<Profile>, Vec<String>) {
-    let (mut profiles, problems) = builtin_profiles();
-    let mut messages: Vec<String> = problems.iter().map(ToString::to_string).collect();
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        let mut files: Vec<PathBuf> = entries
-            .filter_map(Result::ok)
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")))
-            .collect();
-        files.sort();
-        for path in files {
-            let name = file_name(&path);
-            match std::fs::read_to_string(&path)
-                .map_err(|e| e.to_string())
-                .and_then(|text| parse_profile_text(&text, &name, false).map_err(|e| e.to_string()))
-            {
-                Ok((profile, _)) if profiles.iter().any(|p| p.id == profile.id) => {
-                    messages.push(format!("{name}: Profil-ID '{}' ist bereits vorhanden - ignoriert.", profile.id));
-                }
-                Ok((profile, _)) => profiles.push(profile),
-                Err(err) => messages.push(format!("{name}: {err}")),
-            }
-        }
-    }
-    (profiles, messages)
-}
-
 impl DeckelApp {
     pub fn new(ctx: egui::Context, paths: AppPaths) -> Self {
         let dir_error = paths.ensure().err();
         let (config, config_warnings) = AppConfig::load(&paths.config);
         let mut log = AppLog::new(Some(paths.logs.join(LOG_FILE)), Level::parse(&config.log_level));
-        let (profiles, profile_problems) = load_profiles(&paths.profiles);
-        let profile = profiles
-            .iter()
-            .find(|p| p.id == config.active_profile_id)
-            .or_else(|| profiles.first())
-            .cloned()
-            .unwrap_or_else(Profile::fallback);
+        let store = ProfileStore::load(&paths.profiles, &paths.backups);
+        let (profile, fell_back) = store.resolve(&config.active_profile_id);
         log.info(format!(
             "DeckelLink {} (Rust) gestartet - {} - Profil {}",
             env!("CARGO_PKG_VERSION"),
@@ -249,7 +241,13 @@ impl DeckelApp {
         if let Some(err) = dir_error {
             log.error(format!("Datenordner {} konnte nicht angelegt werden: {err}", paths.root.display()));
         }
-        for warning in config_warnings.iter().chain(profile_problems.iter()) {
+        if fell_back {
+            log.warn(format!(
+                "Profil {} nicht verfügbar - Standardprofil {} aktiv",
+                config.active_profile_id, profile.id
+            ));
+        }
+        for warning in config_warnings.iter().chain(store.problems.iter()) {
             log.warn(warning.clone());
         }
         let mut app = Self {
@@ -257,8 +255,7 @@ impl DeckelApp {
             archive: Vec::new(),
             param: ParamState::default(),
             paths,
-            profiles,
-            profile_problems,
+            store,
             profile,
             page: Page::Transfer,
             log,
@@ -283,11 +280,13 @@ impl DeckelApp {
             modem: None,
             ports: Vec::new(),
             log_filter: Level::Info,
+            extra: crate::app_extra::ExtraState::default(),
             config,
         };
         app.refresh_archive();
         app.refresh_parameter_sets();
         app.apply_zoom();
+        app.load_commissioning();
         app
     }
 
@@ -333,11 +332,11 @@ impl DeckelApp {
         self.actions.push(action);
     }
 
-    fn set_status(&mut self, kind: StatusKind, text: impl Into<String>) {
+    pub(crate) fn set_status(&mut self, kind: StatusKind, text: impl Into<String>) {
         self.status = (kind, text.into());
     }
 
-    fn notify(&mut self, text: impl Into<String>) {
+    pub(crate) fn notify(&mut self, text: impl Into<String>) {
         let text = text.into();
         self.log.info(text.clone());
         self.message = Some(text);
@@ -518,6 +517,7 @@ impl DeckelApp {
             }
             Action::RefreshPorts => self.ports = available_ports(),
             Action::ClearTerminal => self.traffic.clear(),
+            other => self.handle_extra(other),
         }
     }
 
@@ -616,7 +616,7 @@ impl DeckelApp {
             profile.id
         ));
         let purpose = if drip_feed { Purpose::DripFeed } else { Purpose::Send };
-        let mut transport = make_transport(&self.config, &profile, purpose);
+        let mut transport = self.transport(&profile, purpose);
         self.send_error = None;
         self.send_progress = None;
         let kind = if drip_feed { TaskKind::DripFeed } else { TaskKind::Send };
@@ -640,7 +640,7 @@ impl DeckelApp {
             return;
         }
         let profile = self.profile.clone();
-        let mut transport = make_transport(&self.config, &profile, Purpose::Receive);
+        let mut transport = self.transport(&profile, Purpose::Receive);
         let archive = ReceiveArchive::new(self.paths.clone());
         self.receive_error = None;
         self.receive_summary = None;
@@ -665,7 +665,7 @@ impl DeckelApp {
         });
     }
 
-    fn spawn<F>(&mut self, kind: TaskKind, job: F)
+    pub(crate) fn spawn<F>(&mut self, kind: TaskKind, job: F)
     where
         F: FnOnce(&deckellink_core::clock::CancelToken, &mut dyn deckellink_core::transfer::EventSink) -> Outcome
             + Send
@@ -759,6 +759,8 @@ impl DeckelApp {
             Outcome::Received { result, program, stored } => self.receive_finished(&result, program, stored),
             Outcome::ParamsRead { result, program, stored } => self.parameter_read_finished(&result, program, stored),
             Outcome::ParamsWritten(result) => self.parameter_write_finished(result),
+            Outcome::Loopback(result) => self.loopback_finished(result),
+            Outcome::Format(result) => self.format_finished(result),
         }
     }
 
@@ -839,6 +841,9 @@ impl DeckelApp {
             StatusKind::Warning
         };
         self.set_status(kind, format!("{} - {}", result.state.label(), result.end_reason.label()));
+        if summary.complete {
+            self.commissioning_auto("receive", "Empfang erfolgreich");
+        }
         self.receive_summary = Some(summary);
         self.refresh_archive();
     }
@@ -860,7 +865,7 @@ impl DeckelApp {
             return;
         }
         let profile = self.profile.clone();
-        let mut transport = make_transport(&self.config, &profile, Purpose::ParamRead);
+        let mut transport = self.transport(&profile, Purpose::ParamRead);
         let archive = ParameterArchive::new(&self.paths.root);
         self.param.error = None;
         self.param.verify = if self.param.last_written.is_some() { self.param.verify.take() } else { None };
@@ -1010,7 +1015,7 @@ impl DeckelApp {
         ));
         let written = candidate.data.clone();
         let profile = self.profile.clone();
-        let mut transport = make_transport(&self.config, &profile, Purpose::ParamWrite);
+        let mut transport = self.transport(&profile, Purpose::ParamWrite);
         self.param.error = None;
         self.param.progress = None;
         self.param.pending_written(written);
@@ -1048,7 +1053,7 @@ impl DeckelApp {
         if self.busy() {
             return;
         }
-        let Some(profile) = self.profiles.iter().find(|p| p.id == id).cloned() else { return };
+        let Some(profile) = self.store.get(id).cloned() else { return };
         self.profile = profile;
         self.config.active_profile_id = id.to_string();
         self.save_config();
@@ -1060,33 +1065,19 @@ impl DeckelApp {
         if let Some(candidate) = self.param.candidate.take() {
             self.param.candidate = Some(ParameterCandidate::new(candidate.name, candidate.data, &self.profile));
         }
+        self.extra.draft = None;
+        self.load_commissioning();
     }
 
     pub fn import_profile(&mut self, path: &Path) {
-        let result = std::fs::read_to_string(path)
-            .map_err(|e| e.to_string())
-            .and_then(|text| parse_profile_text(&text, &file_name(path), false).map_err(|e| e.to_string()));
-        match result {
-            Ok((profile, _)) if self.profiles.iter().any(|p| p.id == profile.id) => {
-                self.message =
-                    Some(format!("Ein Profil mit der ID '{}' existiert bereits - nicht importiert.", profile.id));
-            }
+        match self.store.import_profile(path, &SystemClock::default().now()) {
             Ok((profile, warnings)) => {
-                let text = serde_json::to_string_pretty(&profile_to_json(&profile)).unwrap_or_default() + "\n";
-                let written = unique_path(&self.paths.profiles, &profile.id, ".json")
-                    .and_then(|target| write_new_file(&target, text.as_bytes()).map(|()| target));
-                match written {
-                    Ok(target) => {
-                        self.notify(format!("Profil '{}' importiert ({})", profile.display_name, target.display()));
-                        for warning in warnings {
-                            self.log.warn(format!("Profil {}: {warning}", profile.id));
-                        }
-                        self.profiles.push(profile);
-                    }
-                    Err(err) => self.message = Some(format!("Profil konnte nicht gespeichert werden: {err}")),
+                self.notify(format!("Profil '{}' importiert (ID {})", profile.display_name, profile.id));
+                for warning in warnings {
+                    self.log.warn(format!("Profil {}: {warning}", profile.id));
                 }
             }
-            Err(err) => self.message = Some(format!("Profil ungültig: {err}")),
+            Err(err) => self.message = Some(format!("Profil nicht importiert: {err}")),
         }
     }
 }

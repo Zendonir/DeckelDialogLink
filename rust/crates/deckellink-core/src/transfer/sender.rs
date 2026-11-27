@@ -195,7 +195,7 @@ impl<'a> ProgramSender<'a> {
             if settings.character_delay_ms > 0 {
                 self.sleep_ms(settings.character_delay_ms)?;
             }
-            if packet > 0 && settings.packet_delay_ms > 0 && offset % packet == 0 {
+            if packet > 0 && settings.packet_delay_ms > 0 && offset.is_multiple_of(packet) {
                 self.sleep_ms(settings.packet_delay_ms)?;
             }
         }

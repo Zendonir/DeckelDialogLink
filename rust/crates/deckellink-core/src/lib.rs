@@ -13,11 +13,15 @@
 
 pub mod appdata;
 pub mod clock;
+pub mod commissioning;
+pub mod diagnostics;
 pub mod error;
+pub mod export;
 pub mod model;
 pub mod nc;
 pub mod parameters;
 pub mod profile;
+pub mod profilestore;
 pub mod scenarios;
 pub mod storage;
 pub mod transfer;

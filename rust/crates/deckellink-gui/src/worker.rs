@@ -6,6 +6,8 @@ use std::thread::JoinHandle;
 
 use deckellink_core::appdata::StoredReceive;
 use deckellink_core::clock::CancelToken;
+use deckellink_core::diagnostics::{FormatGuess, LoopbackResult};
+use deckellink_core::error::UserFacingError;
 use deckellink_core::parameters::archive::StoredParameterSet;
 use deckellink_core::transfer::receiver::ReceivedProgram;
 use deckellink_core::transfer::{Event, EventSink, ReceiveResult, SendResult};
@@ -18,6 +20,8 @@ pub enum TaskKind {
     Receive,
     ParamRead,
     ParamWrite,
+    Loopback,
+    FormatDetect,
 }
 
 impl TaskKind {
@@ -28,6 +32,8 @@ impl TaskKind {
             TaskKind::Receive => "Empfangen",
             TaskKind::ParamRead => "Parameter auslesen",
             TaskKind::ParamWrite => "Parameter schreiben",
+            TaskKind::Loopback => "Loopback-Test",
+            TaskKind::FormatDetect => "Datenformat mitlesen",
         }
     }
 }
@@ -47,6 +53,8 @@ pub enum Outcome {
         stored: Result<Option<StoredParameterSet>, String>,
     },
     ParamsWritten(SendResult),
+    Loopback(LoopbackResult),
+    Format(Result<(usize, FormatGuess), UserFacingError>),
 }
 
 #[derive(Debug)]

@@ -3,9 +3,9 @@ name: Rust
 on:
   push:
     branches: ["**"]
-    paths: ["rust/**", "src/deckellink/resources/profiles/**", "src/deckellink/nc/**", "tools/rust_parity.py", ".github/workflows/rust.yml"]
+    paths: ["rust/**", "src/deckellink/resources/profiles/**", "src/deckellink/nc/**", "src/deckellink/parameters/**", "src/deckellink/diagnostics/**", "src/deckellink/transfer/**", "README.md", "docs/**", "tools/rust_parity.py", ".github/workflows/rust.yml"]
   pull_request:
-    paths: ["rust/**", "src/deckellink/resources/profiles/**", "src/deckellink/nc/**", "tools/rust_parity.py", ".github/workflows/rust.yml"]
+    paths: ["rust/**", "src/deckellink/resources/profiles/**", "src/deckellink/nc/**", "src/deckellink/parameters/**", "src/deckellink/diagnostics/**", "src/deckellink/transfer/**", "README.md", "docs/**", "tools/rust_parity.py", ".github/workflows/rust.yml"]
   workflow_dispatch:
 
 permissions:

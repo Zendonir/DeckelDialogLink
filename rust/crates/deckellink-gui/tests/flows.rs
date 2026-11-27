@@ -220,3 +220,105 @@ fn real_mode_needs_confirmation_and_target() {
     h.act(Action::SetSimulation);
     assert!(h.app.simulation());
 }
+
+#[test]
+fn profile_editor_never_overwrites_builtin() {
+    use deckellink_core::model::VerificationStatus;
+    let mut h = Harness::new("editor");
+    let builtin_id = h.app.profile.id.clone();
+    h.act(Action::Navigate(Page::Settings));
+    h.act(Action::EditProfile);
+    let mut draft = h.app.extra.draft.clone().unwrap();
+    draft.serial.baud_rate = 9600;
+    draft.verification_status = VerificationStatus::Verified;
+    h.app.extra.draft = Some(draft);
+    h.frame();
+    h.act(Action::SaveDraft);
+    assert_ne!(h.app.profile.id, builtin_id, "a user copy is active");
+    assert_eq!(h.app.profile.serial.baud_rate, 9600);
+    assert_eq!(h.app.profile.verification_status, VerificationStatus::Unverified, "changed profile is unverified");
+    assert_eq!(h.app.store.get(&builtin_id).unwrap().serial.baud_rate, 4800);
+    assert!(h.app.store.path_for(&h.app.profile.id).unwrap().is_file());
+    h.act(Action::RequestDeleteProfile);
+    assert_eq!(h.app.dialog, Some(Dialog::DeleteProfile));
+    h.frame();
+    h.act(Action::ConfirmDeleteProfile);
+    assert_eq!(h.app.profile.id, builtin_id);
+    h.act(Action::RequestDeleteProfile);
+    assert!(h.app.dialog.is_none(), "built-in profiles cannot be deleted");
+}
+
+#[test]
+fn diagnostics_loopback_format_and_export() {
+    let mut h = Harness::new("diag");
+    h.act(Action::Navigate(Page::Diagnostics));
+    h.act(Action::StartLoopback);
+    h.wait_idle();
+    let result = h.app.extra.loopback_result.clone().unwrap();
+    assert_eq!(result.verdict, deckellink_core::diagnostics::LoopbackVerdict::Passed, "{}", result.summary());
+    h.app.extra.format_duration_s = 5;
+    h.act(Action::ClearTerminal);
+    h.act(Action::StartFormatDetect);
+    h.wait_idle();
+    let (_, guess) = h.app.extra.format_result.clone().unwrap();
+    assert_eq!(guess.frame(), "7E1");
+    assert!(
+        h.app.traffic.iter().all(|t| t.direction == deckellink_core::transfer::Direction::Rx),
+        "format detection never sends"
+    );
+    h.act(Action::ExportDiagnostics);
+    let zip = h.app.extra.last_export.clone().unwrap();
+    assert!(zip.is_file() && zip.extension().unwrap() == "zip");
+    h.frame();
+}
+
+#[test]
+fn replay_and_dropped_files() {
+    let mut h = Harness::new("replay");
+    std::fs::create_dir_all(&h.root).unwrap();
+    let recording = h.root.join("aufnahme.raw");
+    std::fs::write(&recording, b"%AUFNAHME\r\nN10 G0 X1\r\nM30\r\n").unwrap();
+    h.app.config.simulation_scenario = deckellink_core::scenarios::REPLAY_SCENARIO_ID.into();
+    h.app.config.simulation_replay_file = recording.to_string_lossy().into_owned();
+    h.act(Action::Navigate(Page::Settings));
+    h.act(Action::StartReceive);
+    h.wait_idle();
+    let stored = h.app.receive_summary.clone().unwrap().stored_path.unwrap();
+    assert_eq!(std::fs::read(stored).unwrap(), b"%AUFNAHME\r\nN10 G0 X1\r\nM30\r\n");
+    // a dropped file is only loaded, never sent
+    h.act(Action::DroppedFile(recording.clone()));
+    h.frame();
+    assert_eq!(h.app.page, Page::Transfer);
+    assert_eq!(h.app.program.as_ref().unwrap().path, recording);
+    assert!(!h.app.busy() && h.app.dialog.is_none());
+}
+
+#[test]
+fn commissioning_marks_verified_copy() {
+    use deckellink_core::commissioning::{StepStatus, STEPS};
+    use deckellink_core::model::VerificationStatus;
+    let mut h = Harness::new("commissioning");
+    h.act(Action::Navigate(Page::Commissioning));
+    h.act(Action::Navigate(Page::Help));
+    h.act(Action::Navigate(Page::Commissioning));
+    for step in STEPS.iter().filter(|s| s.required) {
+        h.app.push(Action::CommSetStatus(step.id.to_string(), StepStatus::Done));
+    }
+    h.frame();
+    h.act(Action::CommRequestVerify);
+    assert!(h.app.dialog.is_none(), "tester missing");
+    h.app.extra.commissioning.as_mut().unwrap().tester = "Prüfer".into();
+    h.act(Action::CommSave);
+    h.act(Action::CommExport);
+    h.act(Action::CommRequestVerify);
+    assert_eq!(h.app.dialog, Some(Dialog::MarkVerified));
+    h.frame();
+    let builtin_id = h.app.profile.id.clone();
+    h.act(Action::CommConfirmVerify);
+    assert_eq!(h.app.profile.verification_status, VerificationStatus::Verified);
+    assert_ne!(h.app.profile.id, builtin_id, "built-in profile stays unverified");
+    assert_eq!(h.app.store.get(&builtin_id).unwrap().verification_status, VerificationStatus::Unverified);
+    assert!(h.app.profile.description.contains("Verifiziert am"));
+    // reloaded record belongs to the verified copy
+    assert_eq!(h.app.extra.commissioning.as_ref().unwrap().profile_id, h.app.profile.id);
+}

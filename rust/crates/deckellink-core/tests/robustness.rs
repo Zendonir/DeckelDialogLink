@@ -49,7 +49,7 @@ proptest! {
         if let Ok(prepared) = transform(&data, &settings, true) {
             prop_assert_eq!(prepared.line_end_offsets.len(), prepared.line_count);
             prop_assert!(prepared.line_end_offsets.windows(2).all(|w| w[0] <= w[1]));
-            prop_assert!(prepared.line_end_offsets.last().map_or(true, |end| *end <= prepared.data.len()));
+            prop_assert!(prepared.line_end_offsets.last().is_none_or(|end| *end <= prepared.data.len()));
             prop_assert!(prepared.data.iter().all(|b| *b <= 0x7F));
             if settings.strip_null_bytes {
                 prop_assert!(!prepared.data.contains(&0));
