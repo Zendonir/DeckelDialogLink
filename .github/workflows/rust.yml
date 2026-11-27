@@ -44,6 +44,13 @@ jobs:
           name: deckellink-cli-windows
           path: rust/target/release/deckellink-cli.exe
           if-no-files-found: error
+      - name: Upload Windows application
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deckellink-windows
+          path: rust/target/release/deckellink.exe
+          if-no-files-found: error
 
   parity:
     name: Python/Rust parity (differential test)

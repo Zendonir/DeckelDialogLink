@@ -1,0 +1,22 @@
+[package]
+name = "deckellink-gui"
+description = "DeckelLink desktop application (egui)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "deckellink"
+path = "src/main.rs"
+
+[dependencies]
+deckellink-core = { path = "../deckellink-core" }
+eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.37"
+rfd = "0.18"
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

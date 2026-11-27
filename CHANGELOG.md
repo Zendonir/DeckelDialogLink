@@ -2,6 +2,25 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.4] – 2026-11-27
+
+### Hinzugefügt (Rust, Etappe 4)
+- **Oberfläche `deckellink(.exe)`** (egui) mit den Seiten Übertragen, Empfangen, NC-Programme, Maschinenparameter, Terminal, Diagnose, Einstellungen und Protokoll.
+- **Sicherheitsregeln wie in Python:**
+  - Start im Simulationsmodus.
+  - Simulation gelb, Realbetrieb dunkelrot; der Wechsel in den Realbetrieb muss bestätigt werden.
+  - Bestätigungsdialog unmittelbar vor jeder Übertragung.
+  - Nachladebetrieb nur mit LSV2-Profil und eigener Bestätigung.
+  - Parameter-Schreibsperren mit getippter Bestätigung und anschließender Kontrolle durch erneutes Auslesen.
+- **Stabilität:** Port-Zugriffe laufen ausschließlich in Hintergrund-Threads. Bricht ein Hintergrundvorgang unerwartet ab, wird ein Fehler gemeldet; die Oberfläche läuft weiter.
+- **Gemeinsame Daten mit der Python-Version:** Datenordner, `settings.json` (unbekannte Einträge bleiben erhalten), Empfangsarchiv mit denselben Metadaten, Parameterarchiv, die 23 Simulationsszenarien und importierte Profile.
+- **Tests ohne Fenster:** echte egui-Bilder für alle Seiten und Dialoge sowie die Abläufe Senden, Abbruch, Empfang, Nachladebetrieb, Parameter schreiben und Betriebsartwechsel.
+- **CI:** zusätzlich die Windows-Anwendung `deckellink.exe` als Artefakt.
+
+### Noch nicht in der Rust-Oberfläche
+- Profileditor, Loopback-Test, Erkennung des Datenformats, Export der Diagnose, Szenario „Aufzeichnung abspielen“, Inbetriebnahme-Assistent, Hilfe.
+- DIALOG-11-Simulator und Programmverwaltung (Etappen 5 und 6).
+
 ## [Rust 0.8.0-alpha.3] – 2026-11-27
 
 ### Hinzugefügt (Rust, Etappe 3)

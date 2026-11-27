@@ -28,8 +28,42 @@ rust/
     parameters/             Maschinenparameter: Dateistruktur (fileformat), Vergleich wie Python-difflib
                             (difflib), Schreibsperren (mod.rs), Lesen/Schreiben (transfer), Archiv (archive)
     storage.rs              SHA-256, exklusives Anlegen, atomares Schreiben (nie still überschreiben)
+    appdata.rs              Datenordner, settings.json und Empfangsarchiv (kompatibel zur Python-Version)
+    scenarios.rs            Simulationsszenarien (gleiche IDs und Texte wie Python)
   crates/deckellink-cli/    Kommandozeile
+  crates/deckellink-gui/    Oberfläche (egui), Programm deckellink(.exe)
+    app.rs                  Zustand und Aktionen (ohne Fenster testbar)
+    ui.rs                   Seiten und Dialoge
+    worker.rs               Hintergrund-Threads für alle Port-Zugriffe
+    logic.rs                Sperren (Gates), Anzeigehilfen, Transportauswahl
 ```
+
+## Oberfläche (Etappe 4)
+
+`deckellink` (unter Windows `deckellink.exe`) ist die Oberfläche in Rust. Sie hat dieselben Seiten wie die Python-Version: Übertragen, Empfangen, NC-Programme, Maschinenparameter, Terminal, Diagnose, Einstellungen und Protokoll.
+
+Datenordner, `settings.json`, Empfangsarchiv und Parameterarchiv sind dieselben wie in der Python-Version. Beide Versionen können deshalb während der Übergangszeit nebeneinander benutzt werden.
+
+Diese Sicherheitsregeln gelten wie in Python:
+- Nach der Installation startet das Programm im Simulationsmodus.
+- Simulation und Realbetrieb sind deutlich zu unterscheiden. Bei Simulation sind Banner und Startknopf gelb mit schwarzem Rahmen, im Realbetrieb dunkelrot. Der Wechsel in den Realbetrieb muss eigens bestätigt werden.
+- Gesendet wird erst nach einem Bestätigungsdialog unmittelbar vor der Übertragung. Darin stehen Datei, Profil, Schnittstelle, Aufbereitung und bestätigte Warnungen. Im Realbetrieb kommt der Sicherheitshinweis dazu.
+- Der Nachladebetrieb ist nur mit einem LSV2-Profil möglich und verlangt zusätzlich die Bestätigung „Maschine bei Störungen an der CNC anhalten“.
+- Alle Port-Zugriffe laufen in einem Hintergrund-Thread. Die Oberfläche friert deshalb nie ein, und „Abbrechen“ wirkt sofort.
+- Stürzt der Hintergrundvorgang ab, wird das als Fehler gemeldet. Das Programm selbst läuft weiter.
+- Maschinenparameter: Es gelten alle Schreibsperren aus Etappe 3. Die Freischaltung gilt nur für die laufende Sitzung.
+
+Diese Funktionen der Python-Oberfläche fehlen noch:
+- Profileditor; Profile können vorerst nur importiert werden.
+- Loopback-Test, Erkennung des Datenformats und Export der Diagnose.
+- Szenario „Aufzeichnung abspielen“, Inbetriebnahme-Assistent, Hilfe, Drag & Drop.
+- DIALOG-11-Simulator und Programmverwaltung (Etappen 5 und 6).
+
+Tests:
+- `tests/flows.rs` prüft die Abläufe ohne Fenster: Jedes Bild wird mit egui gezeichnet, die Aktionen sind dieselben wie bei den Schaltflächen.
+- Geprüft werden Senden mit und ohne Bestätigung, Abbruch, Empfang ohne Überschreiben, Nachladebetrieb, alle Parameter-Schreibsperren und der Wechsel der Betriebsart.
+
+Unter Linux braucht das Fenster zur Laufzeit `libxkbcommon-x11`. Unter Windows sind keine zusätzlichen Bibliotheken nötig.
 
 ## Kommandozeile (Etappen 1 bis 3)
 
@@ -72,7 +106,7 @@ Senden an einen realen Port (`--port`, `--tcp`, `--rfc2217`) beginnt erst, wenn 
 ```
 cd rust
 cargo test --all
-cargo build --release      # target/release/deckellink-cli(.exe)
+cargo build --release      # target/release/deckellink(.exe) und deckellink-cli(.exe)
 ```
 
 ## Etappen
@@ -82,8 +116,8 @@ cargo build --release      # target/release/deckellink-cli(.exe)
 | 1 | Profile, NC-Prüfung/-Aufbereitung, Ports (seriell, TCP), Simulator, Senden/Empfangen, CLI, CI, Gleichwertigkeitstest | **fertig** |
 | 2 | LSV2-Protokoll und Nachladebetrieb, simulierte LSV2-CNC, RFC 2217; Gleichwertigkeit auf Byte-Ebene (14 LSV2-Szenarien) | **fertig** |
 | 3 | Maschinenparameter (Dateistruktur, Vergleich, Archiv, Schreibsperren, Kontrolle); Gleichwertigkeit für Zufalls-Parameterdateien inkl. Diff-Texten | **fertig** |
-| 4 | Oberfläche (egui): Übertragen, Empfangen, Archiv, Einstellungen, Diagnose, Terminal, Protokoll | offen |
+| 4 | Oberfläche (egui): Übertragen, Empfangen, NC-Programme, Maschinenparameter, Terminal, Diagnose, Einstellungen, Protokoll | **fertig** (Restpunkte siehe oben) |
 | 5 | DIALOG-11-Simulator mit Grafik und Steuerungsmenüs | offen |
 | 6 | Programm- und Werkzeugverwaltung, Inbetriebnahme-Assistent, Windows-Installer | offen |
 
-Bis Etappe 4 abgeschlossen ist, bleibt die Python-Version die Anwendung mit Oberfläche.
+Die Rust-Oberfläche ist für Senden, Empfangen und Parameter benutzbar. Bis alle Funktionen gleichwertig sind (Restpunkte oben, Etappen 5 und 6), bleibt die Python-Version die vollständige Anwendung.

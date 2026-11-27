@@ -11,12 +11,14 @@
     allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::float_cmp)
 )]
 
+pub mod appdata;
 pub mod clock;
 pub mod error;
 pub mod model;
 pub mod nc;
 pub mod parameters;
 pub mod profile;
+pub mod scenarios;
 pub mod storage;
 pub mod transfer;
 pub mod transport;
