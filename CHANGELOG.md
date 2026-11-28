@@ -2,6 +2,11 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.11] – 2026-11-28
+
+### Behoben (Release)
+- Release-Workflow: Die Release-Notizen werden immer als UTF-8 geschrieben. Auf dem Windows-Runner (Konsole cp1252) brach der Build von alpha.10 ab, weil `→` aus dem CHANGELOG nicht darstellbar war. Inhaltlich entspricht alpha.11 der Version alpha.10 (volle Funktionsgleichheit mit der Python-Version einschließlich „Übertragung mitverfolgen“).
+
 ## [Rust 0.8.0-alpha.10] – 2026-11-28
 
 ### Neu (Rust)

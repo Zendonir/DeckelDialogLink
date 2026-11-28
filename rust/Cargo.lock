@@ -503,7 +503,7 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
 name = "deckellink-cli"
-version = "0.8.0-alpha.10"
+version = "0.8.0-alpha.11"
 dependencies = [
  "deckellink-core",
  "serde_json",
@@ -511,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "deckellink-core"
-version = "0.8.0-alpha.10"
+version = "0.8.0-alpha.11"
 dependencies = [
  "chrono",
  "proptest",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "deckellink-gui"
-version = "0.8.0-alpha.10"
+version = "0.8.0-alpha.11"
 dependencies = [
  "chrono",
  "deckellink-core",
