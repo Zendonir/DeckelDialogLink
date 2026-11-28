@@ -19,6 +19,9 @@ Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionier
 - **Selbsttest** `--smoke-test` ohne Fenster: Profile, Prüfung, simuliertes Senden und Empfangen, Original unverändert, Simulator, Programmverwaltung, alle Seiten.
 - **Gleichwertigkeitstest** erweitert um Werkzeugaufrufe, Dateiart, Metadatenformat, Werkzeugprüfung und Werkzeugdatei-Vorlage (0 Abweichungen).
 
+### Behoben (Python und Rust)
+- Simulator: Ein exakter Halbkreis (z. B. der Übergangsbogen bei einer 180°-Umkehr mit Bahnkorrektur) bekam je nach letzter Rundungsstelle einen Zwischenpunkt mehr. Gefunden durch den Gleichwertigkeitstest in der CI.
+
 ## [Rust 0.8.0-alpha.8] – 2026-11-28
 
 ### Neu (Rust)

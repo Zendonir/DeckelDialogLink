@@ -150,7 +150,8 @@ pub fn arc_points(
         }
         sweep
     };
-    let steps = ceil_i64(sweep.to_degrees().abs() / ARC_STEP_DEG).max(2);
+    // tolerance: an exact half circle must not get an extra step from the last rounding digit
+    let steps = ceil_i64(sweep.to_degrees().abs() / ARC_STEP_DEG - 1e-9).max(2);
     let mut points = Vec::new();
     for i in 1..=steps {
         let t = i as f64 / steps as f64;

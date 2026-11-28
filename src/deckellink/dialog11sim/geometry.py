@@ -81,7 +81,8 @@ def arc_points(
                 sweep += 2 * math.pi
             while sweep >= 2 * math.pi:
                 sweep -= 2 * math.pi
-    steps = max(2, math.ceil(abs(math.degrees(sweep)) / ARC_STEP_DEG))
+    # tolerance: an exact half circle must not get an extra step from the last rounding digit
+    steps = max(2, math.ceil(abs(math.degrees(sweep)) / ARC_STEP_DEG - 1e-9))
     points: list[Vec3] = []
     for i in range(1, steps + 1):
         t = i / steps
