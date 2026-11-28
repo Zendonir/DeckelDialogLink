@@ -53,6 +53,14 @@ Diese Sicherheitsregeln gelten wie in Python:
 - Stürzt der Hintergrundvorgang ab, wird das als Fehler gemeldet. Das Programm selbst läuft weiter.
 - Maschinenparameter: Es gelten alle Schreibsperren aus Etappe 3. Die Freischaltung gilt nur für die laufende Sitzung.
 
+**Erscheinungsbild:**
+- Schriften: Inter für Text und JetBrains Mono für Daten und Code; beide sind eingebettet, siehe `crates/deckellink-gui/assets/fonts`.
+- Material-Symbole statt Emoji.
+- Dunkles Industrie-Design mit blauem Akzent, wahlweise hell oder wie das System (Einstellungen › Darstellung).
+- Kopfzeile mit Logo, Verbindungs- und Profilstatus.
+- Navigation in Gruppen; die Inhalte stehen in Karten.
+- Simulation ist in beiden Varianten immer gelb, Realbetrieb immer dunkelrot.
+
 Außerdem enthält die Oberfläche:
 - **Profileditor:** Mitgelieferte Profile werden nie überschrieben; beim Speichern entsteht ein Benutzerprofil. Technische Änderungen setzen den Status auf „nicht verifiziert“. Kopieren, Löschen (mit Sicherung), Import und Export sind möglich.
 - **Diagnose:**

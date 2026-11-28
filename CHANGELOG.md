@@ -2,6 +2,20 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.6] – 2026-11-28
+
+### Geändert (Rust-Oberfläche)
+- **Neues Erscheinungsbild:**
+  - Schriften Inter und JetBrains Mono (eingebettet, freie Lizenzen) und Material-Symbole.
+  - Dunkles und helles Farbschema sowie „wie System“.
+  - Kopfzeile mit Logo und Statusplaketten.
+  - Gruppierte Navigation mit Symbolen.
+  - Inhalte in Karten, hervorgehobene Hauptknöpfe, farbige Hinweisboxen, Terminal im Konsolenstil.
+- Simulation (gelb) und Realbetrieb (dunkelrot) bleiben in beiden Farbschemata eindeutig unterscheidbar.
+
+### Behoben (Rust)
+- Die Einstellungen `simulation_replay_file` und `ui_theme` wurden beim Programmstart nicht gelesen. Folge: Die gewählte Aufzeichnung ging nach einem Neustart verloren.
+
 ## [Rust 0.8.0-alpha.5] – 2026-11-27
 
 ### Hinzugefügt (Rust, Etappe 4 abgeschlossen)

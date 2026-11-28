@@ -9,6 +9,7 @@ pub mod app;
 pub mod app_extra;
 pub mod applog;
 pub mod logic;
+pub mod theme;
 pub mod ui;
 pub mod ui_extra;
 pub mod worker;

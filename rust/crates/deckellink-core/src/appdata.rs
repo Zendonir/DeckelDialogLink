@@ -162,6 +162,8 @@ pub struct AppConfig {
     pub font_scale_percent: u64,
     /// Recording used by the replay scenario ("" = sample program).
     pub simulation_replay_file: String,
+    /// Colour scheme of the Rust interface: "dunkel", "hell" or "system".
+    pub ui_theme: String,
     /// All keys of the file, including those only the Python version knows.
     pub extra: Map<String, Value>,
 }
@@ -184,6 +186,7 @@ impl Default for AppConfig {
             recent_files: Vec::new(),
             font_scale_percent: 100,
             simulation_replay_file: String::new(),
+            ui_theme: "dunkel".into(),
             extra: Map::new(),
         }
     }
@@ -209,6 +212,8 @@ impl AppConfig {
                 | "active_profile_id"
                 | "log_level"
                 | "last_open_dir"
+                | "simulation_replay_file"
+                | "ui_theme"
                 | "connection_kind" => {
                     let Some(text) = value.as_str() else {
                         warnings.push(format!("Ungültiger Wert für {key}: {value}"));
@@ -223,6 +228,7 @@ impl AppConfig {
                         "log_level" => config.log_level = text,
                         "last_open_dir" => config.last_open_dir = text,
                         "simulation_replay_file" => config.simulation_replay_file = text,
+                        "ui_theme" => config.ui_theme = text,
                         _ => match ConnectionKind::parse(&text) {
                             Some(kind) => config.connection_kind = kind,
                             None => warnings.push(format!("Unbekannte Verbindungsart '{text}'")),
@@ -264,6 +270,10 @@ impl AppConfig {
                 _ => {}
             }
         }
+        if !["dunkel", "hell", "system"].contains(&config.ui_theme.as_str()) {
+            warnings.push(format!("Unbekannte Darstellung '{}'", config.ui_theme));
+            config.ui_theme = "dunkel".into();
+        }
         if !LOG_LEVELS.contains(&config.log_level.as_str()) {
             warnings.push(format!("Unbekanntes Log-Level '{}'", config.log_level));
             config.log_level = "INFO".into();
@@ -289,6 +299,7 @@ impl AppConfig {
             "recent_files": self.recent_files,
             "font_scale_percent": self.font_scale_percent,
             "simulation_replay_file": self.simulation_replay_file,
+            "ui_theme": self.ui_theme,
         });
         if let Value::Object(known) = known {
             for (key, value) in known {
@@ -522,8 +533,12 @@ mod tests {
         map.insert("network_port".into(), json!(70000));
         map.insert("tool_export_header".into(), json!("PYTHON"));
         map.insert("log_level".into(), json!("LAUT"));
+        map.insert("ui_theme".into(), json!("hell"));
+        map.insert("simulation_replay_file".into(), json!("aufnahme.raw"));
         let (mut config, warnings) = AppConfig::from_json(&map);
         assert!(!config.simulation_mode);
+        assert_eq!(config.ui_theme, "hell");
+        assert_eq!(config.simulation_replay_file, "aufnahme.raw");
         assert_eq!(config.network_port, 4001);
         assert_eq!(warnings.len(), 2);
         config.add_recent_file("a.nc");

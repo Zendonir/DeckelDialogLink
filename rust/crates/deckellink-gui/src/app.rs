@@ -285,6 +285,7 @@ impl DeckelApp {
         };
         app.refresh_archive();
         app.refresh_parameter_sets();
+        crate::theme::install(&app.ctx, &app.config.ui_theme);
         app.apply_zoom();
         app.load_commissioning();
         app
