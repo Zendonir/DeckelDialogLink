@@ -9,9 +9,11 @@ pub mod app;
 pub mod app_extra;
 pub mod applog;
 pub mod logic;
+pub mod sim_app;
 pub mod theme;
 pub mod ui;
 pub mod ui_extra;
+pub mod ui_sim;
 pub mod worker;
 
 use deckellink_core::appdata::AppPaths;

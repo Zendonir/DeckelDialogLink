@@ -30,6 +30,8 @@ rust/
     storage.rs              SHA-256, exklusives Anlegen, atomares Schreiben (nie still überschreiben)
     appdata.rs              Datenordner, settings.json und Empfangsarchiv (kompatibel zur Python-Version)
     scenarios.rs            Simulationsszenarien (gleiche IDs und Texte wie Python)
+    sim/                    DIALOG-11-Simulator: Syntax, Rechenausdrücke, Geometrie, Interpreter,
+                            Zyklen G81-G89, Wiedergabe, Menübaum, Befehlsübersicht
   crates/deckellink-cli/    Kommandozeile
   crates/deckellink-gui/    Oberfläche (egui), Programm deckellink(.exe)
     app.rs                  Zustand und Aktionen (ohne Fenster testbar)
@@ -81,7 +83,13 @@ Außerdem enthält die Oberfläche:
 - **Hilfe:** Die Dokumentation aus `README.md` und `docs/` ist ins Programm eingebaut.
 - **Drag & Drop:** Eine Datei auf das Fenster ziehen lädt sie, gesendet wird nichts.
 
-Noch nicht in Rust: DIALOG-11-Simulator und Programmverwaltung (Etappen 5 und 6) sowie der Windows-Installer.
+- **DIALOG-11-Simulator** (Taste „DIALOG-11-SIMULATOR“, Menü Werkzeuge oder Softkey „SIMULIEREN“ auf der Seite Übertragen):
+  - Betriebsartentasten 1 HANDFAHREN, 2 AUTOMATIK, 3 PROGRAMM und Hilfsbetriebsarten MODE, INFO, HELP, EDIT, GRAF, DIA; die Softkeys F1–F8 folgen dem Menübaum der Steuerung.
+  - Programmliste mit markiertem Satz, Werkzeugbahn in XY, XZ, YZ und 3D (Zoom, Verschieben, Drehen), Istwert und Restweg, Modalliste, Meldungen, Werkzeug- und Nullpunkttabelle, Parametertabelle, Befehlsübersicht.
+  - Testlauf mit Zyklus-Start/-Stopp, Einzelsatz, Tempo und Zeitleiste; Handfahren und FAHREN nur im Simulator; Editieren mit DIA-Eingabe, Suchen, Ersetzen, Kopieren, Schieben.
+  - Rein offline: kein Port, keine Übertragung. Die Originaldatei wird nie verändert; „Als neue Datei“ legt nur neue Dateien an.
+
+Noch nicht in Rust: Programm- und Werkzeugverwaltung (Etappe 6) sowie der Windows-Installer.
 
 Tests:
 - `tests/flows.rs` prüft die Abläufe ohne Fenster: Jedes Bild wird mit egui gezeichnet, die Aktionen sind dieselben wie bei den Schaltflächen.
@@ -141,7 +149,7 @@ cargo build --release      # target/release/deckellink(.exe) und deckellink-cli(
 | 2 | LSV2-Protokoll und Nachladebetrieb, simulierte LSV2-CNC, RFC 2217; Gleichwertigkeit auf Byte-Ebene (14 LSV2-Szenarien) | **fertig** |
 | 3 | Maschinenparameter (Dateistruktur, Vergleich, Archiv, Schreibsperren, Kontrolle); Gleichwertigkeit für Zufalls-Parameterdateien inkl. Diff-Texten | **fertig** |
 | 4 | Oberfläche (egui) mit allen Seiten, Profileditor, Diagnose (Loopback, Formaterkennung, Diagnosepaket), Aufzeichnung abspielen, Inbetriebnahme-Assistent, Hilfe | **fertig** |
-| 5 | DIALOG-11-Simulator mit Grafik und Steuerungsmenüs | offen |
+| 5 | DIALOG-11-Simulator mit Grafik und Steuerungsmenüs; Gleichwertigkeit für das Demoprogramm und Zufallsprogramme (Bahnen, Meldungen, Zustände, Parameter) | **fertig** |
 | 6 | Programm- und Werkzeugverwaltung, Inbetriebnahme-Assistent, Windows-Installer | offen |
 
-Die Rust-Oberfläche deckt alles außer dem DIALOG-11-Simulator und der Programmverwaltung ab. Bis die Etappen 5 und 6 fertig sind, bleibt die Python-Version die vollständige Anwendung.
+Die Rust-Oberfläche deckt alles außer der Programm- und Werkzeugverwaltung ab. Bis Etappe 6 fertig ist, bleibt die Python-Version die vollständige Anwendung.

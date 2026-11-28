@@ -38,7 +38,7 @@ class MenuItem:
     @property
     def title(self) -> str:
         label = self.label.replace("-\n", "-").replace("\n", " ")
-        return f"{self.code} {label}".strip() if self.code else label
+        return f"{self.code} {label}".strip() if self.code and self.code != self.label else label
 
     def slots(self) -> list[MenuItem | None]:
         """Children placed on softkeys F1..F8."""

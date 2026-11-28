@@ -328,7 +328,8 @@ pub fn offset_polyline(
             out_src.push(*s_here);
             continue;
         }
-        let inner = cross * side > 0.0;
+        // exact reversal (cross ~ 0) counts as outer corner: no rounding-dependent sign
+        let inner = cross * side > 1e-9;
         if inner {
             let hit = intersect(uv(plane, a_end), d_in, uv(plane, b_start), d_out);
             match hit {

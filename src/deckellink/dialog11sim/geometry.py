@@ -209,7 +209,7 @@ def offset_polyline(
             out.append(a_end)
             out_src.append(src[i])
             continue
-        inner = cross * side > 0
+        inner = cross * side > 1e-9  # exact reversal (cross ~ 0) counts as outer corner
         if inner:
             hit = _intersect(plane.to_plane(a_end)[:2], d_in, plane.to_plane(b_start)[:2], d_out)
             if hit is not None and math.dist(hit, (pu, pv)) <= 4 * radius:

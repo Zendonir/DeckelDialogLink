@@ -75,6 +75,8 @@ pub enum KeyStyle {
     /// Starts a transfer: yellow in simulation, dark red in real operation.
     Transfer,
     Cancel,
+    /// Machine function the simulator does not reproduce (shows an explanation only).
+    Unavailable,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,7 +118,7 @@ pub fn softkeys(app: &DeckelApp) -> [Option<Softkey>; 8] {
                 } else {
                     None
                 },
-                None,
+                key("SIMU-\nLIEREN", Action::SimulateProgram, idle && app.program.is_some()),
                 cancel,
             ]
         }
@@ -217,6 +219,26 @@ pub fn softkeys(app: &DeckelApp) -> [Option<Softkey>; 8] {
                 None,
             ]
         }
+        Page::Simulator => {
+            let mut keys: [Option<Softkey>; 8] = Default::default();
+            if let Some(menu) = app.sim.menu() {
+                for ((index, slot), item) in keys.iter_mut().enumerate().zip(menu.slots()) {
+                    let Some(item) = item else { continue };
+                    let code = if item.code.is_empty() || crate::sim_app::AUX_CODES.contains(&item.code) {
+                        String::new()
+                    } else {
+                        format!("{}\n", item.code)
+                    };
+                    *slot = Some(Softkey {
+                        label: format!("{code}{}", item.label),
+                        action: Action::Sim(crate::sim_app::SimAction::Softkey(index + 1)),
+                        enabled: true,
+                        style: if item.available { KeyStyle::Normal } else { KeyStyle::Unavailable },
+                    });
+                }
+            }
+            keys
+        }
         Page::Help => {
             let count = crate::ui_extra::HELP_DOCUMENTS.len();
             let current = app.extra.help_doc;
@@ -259,6 +281,9 @@ fn softkey_row(app: &mut DeckelApp, ui: &mut Ui) {
                         KeyStyle::Transfer if app.simulation() => Some((SIM_FILL, SIM_TEXT)),
                         KeyStyle::Transfer => Some((REAL_FILL, REAL_TEXT)),
                         KeyStyle::Cancel => Some((Color32::from_rgb(0xb3, 0x26, 0x1e), Color32::WHITE)),
+                        KeyStyle::Unavailable => {
+                            Some((Color32::from_rgb(0xc9, 0xcf, 0xd4), Color32::from_rgb(0x5f, 0x68, 0x70)))
+                        }
                         KeyStyle::Normal => None,
                     };
                     if hardware_key(ui, Vec2::new(width, 58.0), &number, &softkey.label, false, softkey.enabled, fill)
@@ -277,7 +302,7 @@ fn softkey_row(app: &mut DeckelApp, ui: &mut Ui) {
 
 /// F1-F8, Esc (cancel), Ctrl+1..8 (pages), Ctrl+O (open), Ctrl +/-/0 (font size). Not while a dialog is open.
 fn keyboard(app: &mut DeckelApp, ctx: &egui::Context) {
-    if app.dialog.is_some() {
+    if app.dialog.is_some() || app.sim.dialog.is_some() {
         return;
     }
     let keys = softkeys(app);
@@ -403,6 +428,7 @@ fn menu_bar(app: &mut DeckelApp, ui: &mut Ui) {
                 ("Datenformat ermitteln (nur Mitlesen) …", Page::Diagnostics),
                 ("Diagnosepaket exportieren …", Page::Diagnostics),
                 ("Inbetriebnahme-Assistent …", Page::Commissioning),
+                ("DIALOG-11-Simulator (Grafik, offline) …", Page::Simulator),
             ] {
                 if ui.button(text).clicked() {
                     app.push(Action::Navigate(page));
@@ -517,6 +543,17 @@ fn navigation(app: &mut DeckelApp, ui: &mut Ui) {
             app.push(Action::Navigate(Page::Commissioning));
         }
     });
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.add_space(10.0);
+        let width = ui.available_width() - 10.0;
+        if hardware_key(ui, Vec2::new(width, 34.0), "", "DIALOG-11-SIMULATOR", app.page == Page::Simulator, true, None)
+            .on_hover_text("Grafische Offline-Simulation (keine Verbindung zur Maschine)")
+            .clicked()
+        {
+            app.push(Action::Navigate(Page::Simulator));
+        }
+    });
 }
 
 /// The dark display: mode line, page content.
@@ -545,6 +582,10 @@ fn screen(app: &mut DeckelApp, ui: &mut Ui) {
                 format!("{number}{}  ›  {}", app.page.label().to_uppercase(), sub.to_uppercase())
             };
             let right = format!("{}  {}", app.profile.serial.frame(), if app.simulation() { "SIM" } else { "REAL" });
+            if app.page == Page::Simulator {
+                crate::ui_sim::page(app, ui);
+                return;
+            }
             mode_line(ui, &path, &right);
             ui.add_space(8.0);
             ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -560,6 +601,7 @@ fn screen(app: &mut DeckelApp, ui: &mut Ui) {
                     Page::Log => log_page(app, ui),
                     Page::Commissioning => crate::ui_extra::commissioning_page(app, ui),
                     Page::Help => crate::ui_extra::help_page(app, ui),
+                    Page::Simulator => {}
                 }
             });
         });

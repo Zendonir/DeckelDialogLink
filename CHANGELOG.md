@@ -2,6 +2,25 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.8] – 2026-11-28
+
+### Neu (Rust)
+- **DIALOG-11-Simulator in Rust** (Etappe 5):
+  - Kern `deckellink-core::sim`: Syntax, Rechenausdrücke, Geometrie, Interpreter mit Unterprogrammen, Parametern, IF/Sprüngen und Bahnkorrektur, Zyklen G81–G89, Wiedergabe, Menübaum und Befehlsübersicht.
+  - Gleichwertigkeitstest gegen Python: Demoprogramm und Zufallsprogramme, verglichen werden Bahnen, Meldungen, Steuerungszustände und Parameter (0 Abweichungen).
+- **Simulatorseite in der Oberfläche** im Aufbau der Steuerung:
+  - Betriebsartentasten 1/2/3, Hilfsbetriebsarten MODE, INFO, HELP, EDIT, GRAF, DIA, Softkeys F1–F8 nach dem Menübaum.
+  - Programmliste, Werkzeugbahn (XY, XZ, YZ, 3D), Istwert/Restweg, Modalliste, Meldungen, Werkzeug-, Nullpunkt- und Parametertabelle.
+  - Testlauf mit Zyklus-Start/-Stopp und Einzelsatz, Handfahren, Editieren mit DIA, Suchen und Ersetzen.
+  - Erreichbar über die Taste „DIALOG-11-SIMULATOR“, das Menü Werkzeuge und den Softkey „SIMULIEREN“ auf der Seite Übertragen.
+  - Rein offline; Speichern nur als neue Datei.
+
+### Behoben (Python und Rust)
+- Simulator: Wurde die Punktgrenze beim Abschluss der Bahnkorrektur am Programmende erreicht, brach die Simulation mit einem Fehler ab. Jetzt endet sie mit „Abbruch: zu viele Bahnpunkte“.
+- Simulator: Ein Parameter, der auf sich selbst verweist (z. B. `P8=(P8+1)` in der Parametertabelle), führte zu einer endlosen Rekursion. Jetzt erscheint die Meldung „Parameter-Verweise zu tief verschachtelt“.
+- Simulator: Kehrt eine Kontur mit Bahnkorrektur exakt um (180°), hing die Eckform von der letzten Rundungsstelle ab. Jetzt wird die Spitze immer mit einem Übergangsbogen umfahren.
+- Simulator-Menü: Hilfsbetriebsarten heißen in der Anzeige „EDIT“ statt „EDIT EDIT“.
+
 ## [Rust 0.8.0-alpha.7] – 2026-11-28
 
 ### Geändert (Rust-Oberfläche)

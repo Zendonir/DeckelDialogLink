@@ -46,10 +46,11 @@ pub enum Page {
     Log,
     Commissioning,
     Help,
+    Simulator,
 }
 
 impl Page {
-    pub const ALL: [Page; 10] = [
+    pub const ALL: [Page; 11] = [
         Page::Transfer,
         Page::Receive,
         Page::Programs,
@@ -60,6 +61,7 @@ impl Page {
         Page::Log,
         Page::Commissioning,
         Page::Help,
+        Page::Simulator,
     ];
 
     pub fn label(self) -> &'static str {
@@ -74,6 +76,7 @@ impl Page {
             Page::Log => "Protokoll",
             Page::Commissioning => "Inbetriebnahme",
             Page::Help => "Hilfe",
+            Page::Simulator => "DIALOG-11-Simulator",
         }
     }
 }
@@ -148,6 +151,10 @@ pub enum Action {
     HelpDoc(usize),
     /// Font size step in percent (0 = back to 100 %).
     FontScale(i64),
+    /// Operation on the simulator page.
+    Sim(crate::sim_app::SimAction),
+    /// Open the loaded program in the simulator (display only, no transfer).
+    SimulateProgram,
 }
 
 /// Open modal dialog.
@@ -222,6 +229,7 @@ pub struct DeckelApp {
     pub ports: Vec<PortInfo>,
     pub log_filter: Level,
     pub extra: crate::app_extra::ExtraState,
+    pub sim: crate::sim_app::SimPage,
 }
 
 impl std::fmt::Debug for DeckelApp {
@@ -290,6 +298,7 @@ impl DeckelApp {
             ports: Vec::new(),
             log_filter: Level::Info,
             extra: crate::app_extra::ExtraState::default(),
+            sim: crate::sim_app::SimPage::default(),
             config,
         };
         app.refresh_archive();
@@ -372,6 +381,9 @@ impl DeckelApp {
             self.handle(action);
         }
         self.poll_task();
+        if self.sim.update() {
+            self.ctx.request_repaint_after(std::time::Duration::from_millis(30));
+        }
         if self.busy() {
             self.ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
@@ -383,6 +395,9 @@ impl DeckelApp {
             Action::Navigate(page) => {
                 if page == Page::Diagnostics && self.ports.is_empty() {
                     self.ports = available_ports();
+                }
+                if page == Page::Simulator && self.sim.playback.is_none() && !self.sim.busy {
+                    self.sim.resimulate();
                 }
                 self.page = page;
             }
@@ -540,6 +555,8 @@ impl DeckelApp {
                 self.save_config();
                 self.message = Some(format!("Schriftgröße {value} %"));
             }
+            Action::Sim(action) => self.handle_sim(action),
+            Action::SimulateProgram => self.simulate_loaded_program(),
             other => self.handle_extra(other),
         }
     }

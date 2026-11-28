@@ -385,3 +385,37 @@ fn softkeys_via_function_keys() {
         assert_eq!(ui::softkeys(&h.app).len(), 8);
     }
 }
+
+#[test]
+fn simulator_page_modes_softkeys_and_playback() {
+    let mut h = Harness::new("simulator");
+    h.act(Action::Navigate(Page::Simulator));
+    let start = Instant::now();
+    while h.app.sim.playback.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(30), "simulation did not finish");
+        std::thread::sleep(Duration::from_millis(10));
+        h.frame();
+    }
+    assert!(h.app.sim.result().is_some_and(|r| r.end_reason.starts_with("M30")));
+    // F1 opens 21 TESTLAUF, F1 again 211, F7 2117 START/STOP starts the test run
+    h.press(egui::Key::F1);
+    h.press(egui::Key::F1);
+    assert_eq!(h.app.sim.mode_path(), "2 AUTOMATIK › 21 TESTLAUF › 211 TESTLAUF");
+    h.press(egui::Key::F7);
+    assert!(h.app.sim.running);
+    h.act(Action::Sim(deckellink_gui::sim_app::SimAction::ToEnd));
+    assert!(!h.app.sim.running);
+    // every view, every tab and every mode draws
+    for mode in deckellink_gui::sim_app::ViewMode::ALL {
+        h.act(Action::Sim(deckellink_gui::sim_app::SimAction::View(mode)));
+    }
+    for tab in deckellink_gui::sim_app::SimTab::ALL {
+        h.act(Action::Sim(deckellink_gui::sim_app::SimAction::Tab(tab)));
+    }
+    for mode in [1, 3, 2] {
+        h.act(Action::Sim(deckellink_gui::sim_app::SimAction::SetMode(mode)));
+    }
+    // the simulator never touches the transfer state
+    assert_eq!(h.app.send_state, SendState::Idle);
+    assert!(!h.app.busy());
+}

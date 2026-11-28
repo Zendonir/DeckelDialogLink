@@ -71,7 +71,7 @@ impl MenuItem {
     }
 
     pub fn title(&self) -> String {
-        if self.code.is_empty() {
+        if self.code.is_empty() || self.code == self.label {
             self.flat_label()
         } else {
             format!("{} {}", self.code, self.flat_label()).trim().to_string()
