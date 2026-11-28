@@ -2,6 +2,18 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.7] – 2026-11-28
+
+### Geändert (Rust-Oberfläche)
+- **Aufbau wie in der Python-Version, Bedienung nach dem Vorbild der DIALOG 11:**
+  - Menüleiste, Kopfleiste mit Betriebsart-Banner, nummerierte Seitentasten 1–8.
+  - Dunkler Steuerungsbildschirm mit gelber Betriebsartenanzeige und Softkeys F1–F8 (auch über die F-Tasten).
+  - Monospace-Anzeigen in umrahmten Bereichen.
+  - Ersetzt das Karten-Design aus alpha.6.
+- Tastatur: Esc bricht ab, Strg+1…8 wählt eine Seite, Strg+O öffnet eine Datei, Strg+Plus/Minus/0 ändert die Schriftgröße.
+- Feste Farbgebung unabhängig vom Betriebssystem, wie in der Python-Version. Die Einstellung „Darstellung“ entfällt.
+- Neuer Test: Bedienung über die F-Tasten. Eine Übertragung startet nie ohne Bestätigungsdialog.
+
 ## [Rust 0.8.0-alpha.6] – 2026-11-28
 
 ### Geändert (Rust-Oberfläche)

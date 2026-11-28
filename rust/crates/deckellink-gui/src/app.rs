@@ -96,8 +96,12 @@ pub enum Action {
     LoadSample,
     Recheck,
     SetAppendEnd(bool),
-    RequestSend { drip_feed: bool },
-    ConfirmSend { suppress_safety_notice: bool },
+    RequestSend {
+        drip_feed: bool,
+    },
+    ConfirmSend {
+        suppress_safety_notice: bool,
+    },
     CloseConfirm,
     Cancel,
     StartReceive,
@@ -139,6 +143,11 @@ pub enum Action {
     CommRequestVerify,
     CommConfirmVerify,
     DroppedFile(PathBuf),
+    ToggleHex,
+    LogFilter(Level),
+    HelpDoc(usize),
+    /// Font size step in percent (0 = back to 100 %).
+    FontScale(i64),
 }
 
 /// Open modal dialog.
@@ -285,7 +294,7 @@ impl DeckelApp {
         };
         app.refresh_archive();
         app.refresh_parameter_sets();
-        crate::theme::install(&app.ctx, &app.config.ui_theme);
+        crate::theme::install(&app.ctx);
         app.apply_zoom();
         app.load_commissioning();
         app
@@ -518,6 +527,19 @@ impl DeckelApp {
             }
             Action::RefreshPorts => self.ports = available_ports(),
             Action::ClearTerminal => self.traffic.clear(),
+            Action::ToggleHex => self.terminal_hex = !self.terminal_hex,
+            Action::LogFilter(level) => self.log_filter = level,
+            Action::HelpDoc(index) => {
+                self.extra.help_doc = index.min(crate::ui_extra::HELP_DOCUMENTS.len().saturating_sub(1));
+            }
+            Action::FontScale(delta) => {
+                let current = i64::try_from(self.config.font_scale_percent).unwrap_or(100);
+                let value = if delta == 0 { 100 } else { (current + delta).clamp(80, 200) };
+                self.config.font_scale_percent = u64::try_from(value).unwrap_or(100);
+                self.apply_zoom();
+                self.save_config();
+                self.message = Some(format!("Schriftgröße {value} %"));
+            }
             other => self.handle_extra(other),
         }
     }

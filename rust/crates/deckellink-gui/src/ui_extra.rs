@@ -10,8 +10,8 @@ use deckellink_core::model::{
 };
 use deckellink_core::scenarios::REPLAY_SCENARIO_ID;
 
-use crate::app::{Action, DeckelApp, Page};
-use crate::theme::{card, icon_text, icons, notice, page_header, pill, primary_button, semibold, Palette, Tone};
+use crate::app::{Action, DeckelApp};
+use crate::theme::{fields, lamp, message, mono_bold, screen_box, screen_key, Tone, DIM, GREEN, ORANGE, TEXT, YELLOW};
 
 const BAUD_RATES: [u32; 9] = [110, 300, 600, 1200, 2400, 4800, 9600, 19200, 38400];
 
@@ -32,7 +32,7 @@ pub const HELP_DOCUMENTS: [(&str, &str); 12] = [
 ];
 
 fn warn_color() -> Color32 {
-    crate::theme::DARK.warn
+    ORANGE
 }
 
 // ------------------------------------------------------------------ editor
@@ -81,58 +81,24 @@ fn telegrams(ui: &mut Ui, label: &str, list: &mut Vec<String>) {
     ui.end_row();
 }
 
-/// Profile section of the settings page: actions and the editor for a working copy.
-pub fn profile_tools(app: &mut DeckelApp, ui: &mut Ui) {
-    let idle = !app.busy();
-    ui.horizontal_wrapped(|ui| {
-        if ui
-            .add_enabled(
-                idle && app.extra.draft.is_none(),
-                egui::Button::new(icon_text(icons::ICON_EDIT, "Bearbeiten …")),
-            )
-            .clicked()
-        {
-            app.push(Action::EditProfile);
-        }
-        if ui.add_enabled(idle, egui::Button::new(icon_text(icons::ICON_CONTENT_COPY, "Kopie anlegen"))).clicked() {
-            app.push(Action::DuplicateProfile);
-        }
-        let builtin = app.store.is_builtin(&app.profile.id);
-        if ui
-            .add_enabled(idle && !builtin, egui::Button::new(icon_text(icons::ICON_DELETE, "Löschen …")))
-            .on_disabled_hover_text("Mitgelieferte Standardprofile können nicht gelöscht werden.")
-            .clicked()
-        {
-            app.push(Action::RequestDeleteProfile);
-        }
-        if ui.button(icon_text(icons::ICON_OUTPUT, "Exportieren …")).clicked() {
-            app.push(Action::ExportProfileDialog);
-        }
-        if ui.add_enabled(idle, egui::Button::new(icon_text(icons::ICON_INPUT, "Importieren …"))).clicked() {
-            app.push(Action::ImportProfileDialog);
-        }
-    });
+/// Editor for a working copy of the profile (opened with F3 on the settings page).
+pub fn profile_editor(app: &mut DeckelApp, ui: &mut Ui) {
     let Some(mut draft) = app.extra.draft.clone() else { return };
     ui.add_space(8.0);
-    egui::Frame::new()
-        .fill(Palette::of(ui).input)
-        .stroke(egui::Stroke::new(1.0, Palette::of(ui).accent.gamma_multiply(0.6)))
-        .corner_radius(egui::CornerRadius::same(8))
-        .inner_margin(egui::Margin::same(14))
-        .show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.label(semibold(icon_text(icons::ICON_EDIT, "Profil bearbeiten"), 15.5));
+    screen_box(ui, "Profil bearbeiten", |ui| {
         if app.store.is_builtin(&draft.id) {
             ui.label(
-                RichText::new("Mitgelieferte Profile werden nie überschrieben - beim Speichern entsteht ein Benutzerprofil.")
-                    .color(warn_color()),
+                RichText::new(
+                    "Mitgelieferte Profile werden nie überschrieben - beim Speichern entsteht ein Benutzerprofil.",
+                )
+                .color(warn_color()),
             );
         }
         ui.label(
             RichText::new(
                 "Alle Werte sind Annahmen, bis sie an der FP2A geprüft sind. Technische Änderungen setzen den Status auf 'nicht verifiziert'.",
             )
-            .small(),
+            .color(DIM),
         );
         egui::Grid::new("editor-general").num_columns(2).show(ui, |ui| {
             text(ui, "Anzeigename:", &mut draft.display_name);
@@ -147,9 +113,14 @@ pub fn profile_tools(app: &mut DeckelApp, ui: &mut Ui) {
                 choice(ui, "Baudrate:", "baud", &mut s.baud_rate, &BAUD_RATES, |b| b.to_string());
                 choice(ui, "Datenbits:", "bits", &mut s.data_bits, &[5, 6, 7, 8], |b| b.to_string());
                 choice(ui, "Parität:", "parity", &mut s.parity, Parity::ALL, |p| p.label().to_string());
-                choice(ui, "Stoppbits:", "stop", &mut s.stop_bits, &[StopBits::One, StopBits::OnePointFive, StopBits::Two], |b| {
-                    b.label().to_string()
-                });
+                choice(
+                    ui,
+                    "Stoppbits:",
+                    "stop",
+                    &mut s.stop_bits,
+                    &[StopBits::One, StopBits::OnePointFive, StopBits::Two],
+                    |b| b.label().to_string(),
+                );
                 flag(ui, "Hardware-Handshake RTS/CTS", &mut s.rts_cts);
                 flag(ui, "Software-Handshake XON/XOFF", &mut s.xon_xoff);
                 flag(ui, "DSR/DTR", &mut s.dsr_dtr);
@@ -174,8 +145,12 @@ pub fn profile_tools(app: &mut DeckelApp, ui: &mut Ui) {
                 flag(ui, "Zeilen mit ';' überspringen", &mut t.skip_semicolon_lines);
                 flag(ui, "Zeilenenden vereinheitlichen", &mut t.normalize_line_endings);
                 choice(ui, "Tabulatoren:", "tabs", &mut t.tab_handling, TabHandling::ALL, |v| v.as_str().to_string());
-                choice(ui, "Leerzeichen:", "ws", &mut t.whitespace, WhitespaceHandling::ALL, |v| v.as_str().to_string());
-                choice(ui, "Kommentare:", "comments", &mut t.comment_handling, CommentHandling::ALL, |v| v.as_str().to_string());
+                choice(ui, "Leerzeichen:", "ws", &mut t.whitespace, WhitespaceHandling::ALL, |v| {
+                    v.as_str().to_string()
+                });
+                choice(ui, "Kommentare:", "comments", &mut t.comment_handling, CommentHandling::ALL, |v| {
+                    v.as_str().to_string()
+                });
                 text(ui, "Kommentar-Beginn:", &mut t.comment_open);
                 text(ui, "Kommentar-Ende:", &mut t.comment_close);
                 flag(ui, "Zeilenende am Dateiende sicherstellen", &mut t.ensure_final_newline);
@@ -192,7 +167,9 @@ pub fn profile_tools(app: &mut DeckelApp, ui: &mut Ui) {
         egui::CollapsingHeader::new("Empfangen").show(ui, |ui| {
             egui::Grid::new("editor-receive").num_columns(2).show(ui, |ui| {
                 let r = &mut draft.receive;
-                choice(ui, "Ende erkennen:", "end", &mut r.end_detection, EndDetection::ALL, |v| v.as_str().to_string());
+                choice(ui, "Ende erkennen:", "end", &mut r.end_detection, EndDetection::ALL, |v| {
+                    v.as_str().to_string()
+                });
                 text(ui, "Endsequenz:", &mut r.end_sequence);
                 num_u64(ui, "Inaktivität (ms):", &mut r.inactivity_timeout_ms, 3_600_000);
                 num_u64(ui, "Warten auf erstes Byte (ms):", &mut r.first_byte_timeout_ms, 86_400_000);
@@ -229,7 +206,10 @@ pub fn profile_tools(app: &mut DeckelApp, ui: &mut Ui) {
             egui::Grid::new("editor-params").num_columns(2).show(ui, |ui| {
                 let q = &mut draft.parameters;
                 ui.label("");
-                ui.checkbox(&mut q.allow_write, RichText::new("Schreiben von Maschinenparametern erlauben").color(warn_color()));
+                ui.checkbox(
+                    &mut q.allow_write,
+                    RichText::new("Schreiben von Maschinenparametern erlauben").color(warn_color()),
+                );
                 ui.end_row();
                 num_u64(ui, "Inaktivität (ms):", &mut q.inactivity_timeout_ms, 3_600_000);
                 num_u64(ui, "Warten auf erstes Byte (ms):", &mut q.first_byte_timeout_ms, 86_400_000);
@@ -239,10 +219,10 @@ pub fn profile_tools(app: &mut DeckelApp, ui: &mut Ui) {
             });
         });
         ui.horizontal(|ui| {
-            if ui.button("Abbrechen").clicked() {
+            if ui.add(screen_key("Abbrechen")).clicked() {
                 app.push(Action::CancelEdit);
             }
-            if ui.add(primary_button(ui, &icon_text(icons::ICON_SAVE, "Speichern"))).clicked() {
+            if ui.add(screen_key("Speichern")).clicked() {
                 app.push(Action::SaveDraft);
             }
         });
@@ -264,10 +244,7 @@ pub fn replay_selection(app: &mut DeckelApp, ui: &mut Ui) {
             app.config.simulation_replay_file.clone()
         };
         ui.label(format!("Aufzeichnung: {file}"));
-        if ui
-            .add_enabled(!app.busy(), egui::Button::new(icon_text(icons::ICON_FILE_OPEN, "Aufzeichnung wählen …")))
-            .clicked()
-        {
+        if ui.add_enabled(!app.busy(), screen_key("Aufzeichnung wählen")).clicked() {
             app.push(Action::ReplayFileDialog);
         }
     });
@@ -276,28 +253,22 @@ pub fn replay_selection(app: &mut DeckelApp, ui: &mut Ui) {
 // ------------------------------------------------------------- diagnostics
 
 pub fn diagnostics_tools(app: &mut DeckelApp, ui: &mut Ui) {
-    let gate = app.receive_gate();
-    card(ui, Some(icons::ICON_SYNC), "Loopback-Test  ·  TX und RX am Kabel gebrückt, Maschine getrennt", |ui| {
+    screen_box(ui, "Loopback-Test (F2)  -  TX und RX am Kabel gebrückt, Maschine getrennt", |ui| {
         ui.add_enabled_ui(!app.busy(), |ui| {
             ui.horizontal_wrapped(|ui| {
+                ui.label("Muster:");
                 egui::ComboBox::from_id_salt("loop-pattern")
                     .selected_text(app.extra.loopback_pattern.label())
-                    .width(280.0)
+                    .width(300.0)
                     .show_ui(ui, |ui| {
                         for pattern in LoopbackPattern::ALL {
                             ui.selectable_value(&mut app.extra.loopback_pattern, pattern, pattern.label());
                         }
                     });
-                ui.label("Bytes");
+                ui.label("Bytes:");
                 ui.add(egui::DragValue::new(&mut app.extra.loopback_length).range(1..=65_536));
-                ui.label("Timeout (s)");
+                ui.label("Timeout (s):");
                 ui.add(egui::DragValue::new(&mut app.extra.loopback_timeout_s).range(0.5..=120.0).speed(0.1));
-                if ui
-                    .add_enabled(gate.allowed, primary_button(ui, &icon_text(icons::ICON_PLAY_CIRCLE, "Test starten")))
-                    .clicked()
-                {
-                    app.push(Action::StartLoopback);
-                }
             });
         });
         if let Some(result) = app.extra.loopback_result.clone() {
@@ -306,44 +277,37 @@ pub fn diagnostics_tools(app: &mut DeckelApp, ui: &mut Ui) {
                 LoopbackVerdict::Partial => Tone::Warn,
                 LoopbackVerdict::Failed => Tone::Error,
             };
-            notice(ui, tone, &result.summary(), |ui| {
+            message(ui, tone, &result.summary(), |ui| {
                 if let Some(error) = &result.error {
                     ui.label(error.as_text());
                 }
                 for hint in &result.hints {
-                    ui.label(format!("•  {hint}"));
+                    ui.label(format!("- {hint}"));
                 }
             });
         }
     });
-    card(ui, Some(icons::ICON_SCIENCE), "Datenformat mitlesen  ·  nur Empfang, es wird nichts gesendet", |ui| {
+    screen_box(ui, "Datenformat mitlesen (F3)  -  nur Empfang, es wird nichts gesendet", |ui| {
         ui.add_enabled_ui(!app.busy(), |ui| {
             ui.horizontal_wrapped(|ui| {
-                ui.label("Max. Dauer (s)");
+                ui.label("Max. Dauer (s):");
                 ui.add(egui::DragValue::new(&mut app.extra.format_duration_s).range(5..=600));
-                if ui
-                    .add_enabled(gate.allowed, primary_button(ui, &icon_text(icons::ICON_DOWNLOAD, "Mitlesen starten")))
-                    .clicked()
-                {
-                    app.push(Action::StartFormatDetect);
-                }
             });
         });
         ui.label(
             RichText::new(
                 "Danach an der CNC ein Programm ausgeben. Der Port wird mit 8N1 bei der Profil-Baudrate geöffnet.",
             )
-            .small()
-            .color(Palette::of(ui).weak),
+            .color(DIM),
         );
         if let Some((bytes, guess)) = &app.extra.format_result {
             let tone = if guess.confidence == "keine" { Tone::Warn } else { Tone::Ok };
-            notice(
+            message(
                 ui,
                 tone,
-                &format!("Ergebnis: {}  ·  Sicherheit {}  ·  {bytes} Bytes", guess.frame(), guess.confidence),
+                &format!("Ergebnis {}  Sicherheit {}  ({bytes} Bytes)", guess.frame(), guess.confidence),
                 |ui| {
-                    ui.monospace(guess.report());
+                    ui.label(guess.report());
                 },
             );
         }
@@ -351,19 +315,16 @@ pub fn diagnostics_tools(app: &mut DeckelApp, ui: &mut Ui) {
             crate::ui::error_panel(ui, &error);
         }
     });
-    card(ui, Some(icons::ICON_ARCHIVE), "Diagnosepaket  ·  ZIP mit Protokollen, Einstellungen und Profil", |ui| {
+    screen_box(ui, "Diagnosepaket (F4)  -  ZIP mit Protokollen, Einstellungen und Profil", |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(&mut app.extra.export_mask_paths, "Pfade maskieren");
             ui.add_enabled(
                 app.program.is_some(),
                 egui::Checkbox::new(&mut app.extra.export_include_file, "geladene NC-Datei beilegen"),
             );
-            if ui.button(icon_text(icons::ICON_SAVE, "Diagnosepaket erstellen")).clicked() {
-                app.push(Action::ExportDiagnostics);
-            }
         });
         if let Some(path) = &app.extra.last_export {
-            ui.label(RichText::new(format!("Zuletzt erstellt: {}", path.display())).color(Palette::of(ui).weak));
+            ui.label(RichText::new(format!("Zuletzt erstellt: {}", path.display())).color(DIM));
         }
     });
 }
@@ -371,126 +332,86 @@ pub fn diagnostics_tools(app: &mut DeckelApp, ui: &mut Ui) {
 // ---------------------------------------------------------- commissioning
 
 pub fn commissioning_page(app: &mut DeckelApp, ui: &mut Ui) {
-    page_header(
-        ui,
-        icons::ICON_CHECKLIST,
-        "Inbetriebnahme-Assistent",
-        "Dokumentiert, was der Bediener geprüft hat - DeckelLink ändert hier keine Maschineneinstellungen. Ergebnisse im Realbetrieb werden automatisch eingetragen.",
+    ui.label(
+        RichText::new("Dokumentiert, was der Bediener geprüft hat - DeckelLink ändert hier keine Maschineneinstellungen. Ergebnisse im Realbetrieb werden automatisch eingetragen.")
+            .color(DIM),
     );
-    let verified = app.profile.verification_status == VerificationStatus::Verified;
+    ui.add_space(6.0);
     let Some(mut record) = app.extra.commissioning.clone() else { return };
+    let verified = app.profile.verification_status == VerificationStatus::Verified;
     let mut changed = false;
-    card(ui, Some(icons::ICON_VERIFIED), &format!("Profil: {}", app.profile.display_name), |ui| {
-        let p = Palette::of(ui);
-        ui.horizontal(|ui| {
-            if verified {
-                pill(ui, "verifiziert", p.ok);
-            } else {
-                pill(ui, "nicht verifiziert", p.warn);
-            }
-            #[allow(clippy::cast_precision_loss)]
-            let fraction = record.done_count() as f32 / STEPS.len() as f32;
-            ui.add(
-                egui::ProgressBar::new(fraction)
-                    .text(format!("{} von {} Schritten bearbeitet", record.done_count(), STEPS.len()))
-                    .fill(p.accent)
-                    .desired_width(360.0),
-            );
-        });
-        ui.add_space(4.0);
-        egui::Grid::new("comm-head").num_columns(2).spacing([14.0, 8.0]).show(ui, |ui| {
-            ui.label("Prüfer");
+    screen_box(ui, "Profil und Prüfer", |ui| {
+        fields(
+            ui,
+            "comm-profile",
+            &[
+                ("Profil", app.profile.display_name.clone()),
+                ("Status", if verified { "verifiziert".into() } else { "nicht verifiziert".into() }),
+                ("Fortschritt", format!("{} von {} Schritten bearbeitet", record.done_count(), STEPS.len())),
+            ],
+        );
+        egui::Grid::new("comm-head").num_columns(2).spacing([16.0, 6.0]).show(ui, |ui| {
+            ui.label(RichText::new("Prüfer:").color(DIM));
             changed |= ui.add(egui::TextEdit::singleline(&mut record.tester).desired_width(320.0)).lost_focus();
             ui.end_row();
-            ui.label("Maschine/Steuerungsstand");
+            ui.label(RichText::new("Maschine/Steuerungsstand:").color(DIM));
             changed |= ui.add(egui::TextEdit::singleline(&mut record.machine_info).desired_width(320.0)).lost_focus();
             ui.end_row();
         });
     });
-    for (index, step) in STEPS.iter().enumerate() {
-        let current = record.step(step.id);
-        let p = Palette::of(ui);
-        let (tone_color, tone_icon) = match current.status {
-            StepStatus::Done => (p.ok, icons::ICON_CHECK_CIRCLE),
-            StepStatus::NotApplicable => (p.weak, icons::ICON_CANCEL),
-            StepStatus::Open => (if step.required { p.warn } else { p.weak }, icons::ICON_CIRCLE),
-        };
-        card(ui, None, "", |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(tone_icon.codepoint).size(20.0).color(tone_color));
-                ui.label(semibold(
-                    format!(
-                        "{}. {}{}",
-                        index + 1,
-                        step.title,
-                        if step.required || step.title.contains('(') { "" } else { " (optional)" }
-                    ),
-                    14.5,
-                ));
-            });
-            ui.label(RichText::new(step.description).color(p.weak));
-            ui.horizontal_wrapped(|ui| {
+    screen_box(ui, "Schritte", |ui| {
+        egui::Grid::new("comm-steps").num_columns(4).spacing([12.0, 6.0]).striped(true).show(ui, |ui| {
+            for title in ["NR", "SCHRITT", "STATUS", "NOTIZ"] {
+                ui.label(RichText::new(title).color(YELLOW));
+            }
+            ui.end_row();
+            for (index, step) in STEPS.iter().enumerate() {
+                let current = record.step(step.id);
+                let color = match current.status {
+                    StepStatus::Done => GREEN,
+                    StepStatus::NotApplicable => DIM,
+                    StepStatus::Open if step.required => ORANGE,
+                    StepStatus::Open => DIM,
+                };
+                ui.label(mono_bold(format!("{:>2}", index + 1), 13.5).color(color));
+                ui.vertical(|ui| {
+                    ui.set_max_width(420.0);
+                    let optional = if step.required || step.title.contains('(') { "" } else { " (optional)" };
+                    ui.label(RichText::new(format!("{}{optional}", step.title)).color(TEXT));
+                    ui.label(RichText::new(step.description).small().color(DIM));
+                });
                 let mut status = current.status;
-                egui::ComboBox::from_id_salt(("comm-status", step.id)).selected_text(status.label()).show_ui(
-                    ui,
-                    |ui| {
+                egui::ComboBox::from_id_salt(("comm-status", step.id))
+                    .selected_text(status.label())
+                    .width(150.0)
+                    .show_ui(ui, |ui| {
                         for option in StepStatus::ALL {
                             ui.selectable_value(&mut status, option, option.label());
                         }
-                    },
-                );
+                    });
                 if status != current.status {
                     app.push(Action::CommSetStatus(step.id.to_string(), status));
                 }
                 let mut note = current.note.clone();
-                let response = ui.add(egui::TextEdit::singleline(&mut note).hint_text("Notiz").desired_width(360.0));
+                let response = ui.add(egui::TextEdit::singleline(&mut note).hint_text("Notiz").desired_width(260.0));
                 if response.changed() {
                     record.set_note(step.id, &note);
                 }
                 changed |= response.lost_focus();
-                let target = match step.action {
-                    "loopback" | "format" => Some(Page::Diagnostics),
-                    "receive" => Some(Page::Receive),
-                    "send" => Some(Page::Transfer),
-                    "parameters" => Some(Page::Parameters),
-                    "help" => Some(Page::Help),
-                    _ => None,
-                };
-                if let Some(page) = target {
-                    if ui.button(icon_text(crate::ui::page_icon(page), page.label())).clicked() {
-                        app.push(Action::Navigate(page));
-                    }
-                }
-                if !current.updated_at.is_empty() {
-                    ui.label(RichText::new(&current.updated_at).small().color(p.weak));
-                }
-            });
+                ui.end_row();
+            }
         });
-    }
+    });
     app.extra.commissioning = Some(record.clone());
     if changed {
         app.push(Action::CommSave);
     }
     let missing = record.missing_required();
-    if !missing.is_empty() {
-        notice(ui, Tone::Info, &format!("Offene Pflichtschritte: {}", missing.len()), |ui| {
-            ui.label(missing.iter().map(|s| s.title).collect::<Vec<_>>().join("  ·  "));
-        });
+    if missing.is_empty() {
+        lamp(ui, GREEN, "ALLE PFLICHTSCHRITTE ERLEDIGT - F2 ALS VERIFIZIERT MARKIEREN (Prüfer erforderlich)");
+    } else {
+        lamp(ui, ORANGE, &format!("OFFENE PFLICHTSCHRITTE: {}", missing.len()));
     }
-    ui.horizontal(|ui| {
-        if ui.button(icon_text(icons::ICON_DESCRIPTION, "Protokoll exportieren (Markdown)")).clicked() {
-            app.push(Action::CommExport);
-        }
-        if ui
-            .add_enabled(
-                record.can_mark_verified() && !app.busy(),
-                primary_button(ui, &icon_text(icons::ICON_VERIFIED, "Profil als verifiziert markieren …")),
-            )
-            .clicked()
-        {
-            app.push(Action::CommRequestVerify);
-        }
-    });
 }
 
 // ---------------------------------------------------------------- help
@@ -530,13 +451,13 @@ pub fn markdown(ui: &mut Ui, source: &str) {
             ui.separator();
         } else if let Some(rest) = trimmed.strip_prefix("# ") {
             ui.add_space(6.0);
-            ui.label(semibold(inline(rest), 22.0));
+            ui.label(mono_bold(inline(rest).to_uppercase(), 16.0).color(YELLOW));
         } else if let Some(rest) = trimmed.strip_prefix("## ") {
             ui.add_space(6.0);
             ui.add_space(4.0);
-            ui.label(semibold(inline(rest), 17.0).color(Palette::of(ui).accent));
+            ui.label(mono_bold(inline(rest), 14.5).color(YELLOW));
         } else if let Some(rest) = trimmed.strip_prefix("### ").or_else(|| trimmed.strip_prefix("#### ")) {
-            ui.label(semibold(inline(rest), 14.5));
+            ui.label(mono_bold(inline(rest), 13.5).color(TEXT));
         } else if trimmed.starts_with('|') {
             if trimmed.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ')) {
                 continue;
@@ -560,61 +481,55 @@ pub fn markdown(ui: &mut Ui, source: &str) {
 }
 
 pub fn help_page(app: &mut DeckelApp, ui: &mut Ui) {
-    page_header(
-        ui,
-        icons::ICON_MENU_BOOK,
-        "Handbuch",
-        "DeckelLink überträgt ausschließlich Daten; Programmauswahl, Freigabe und Ausführung bleiben an der CNC.",
-    );
-    ui.horizontal_wrapped(|ui| {
-        for (index, (title, _)) in HELP_DOCUMENTS.iter().enumerate() {
-            if ui.selectable_label(app.extra.help_doc == index, *title).clicked() {
-                app.extra.help_doc = index;
+    ui.columns(2, |cols| {
+        let [index, body] = cols else { return };
+        screen_box(index, "Inhalt", |ui| {
+            for (number, (title, _)) in HELP_DOCUMENTS.iter().enumerate() {
+                let active = app.extra.help_doc == number;
+                let text =
+                    RichText::new(format!("{:>2}  {title}", number + 1)).color(if active { YELLOW } else { TEXT });
+                if ui.selectable_label(active, text).clicked() {
+                    app.push(Action::HelpDoc(number));
+                }
             }
-        }
-    });
-    ui.add_space(8.0);
-    let (_, text) =
-        HELP_DOCUMENTS.get(app.extra.help_doc).or_else(|| HELP_DOCUMENTS.first()).copied().unwrap_or(("", ""));
-    card(ui, None, "", |ui| {
-        ui.set_max_width(ui.available_width().min(900.0));
-        markdown(ui, text);
+        });
+        let (_, text) =
+            HELP_DOCUMENTS.get(app.extra.help_doc).or_else(|| HELP_DOCUMENTS.first()).copied().unwrap_or(("", ""));
+        screen_box(body, "", |ui| markdown(ui, text));
     });
 }
 
 // ---------------------------------------------------------------- dialogs
 
 pub fn delete_profile_dialog(app: &mut DeckelApp, ui: &mut Ui) {
-    crate::ui::dialog_title(ui, icons::ICON_DELETE, "Profil löschen");
+    crate::ui::dialog_title(ui, "Profil löschen");
     ui.label(format!(
         "Benutzerprofil '{}' ({}) löschen? Eine Sicherung bleibt im Ordner 'backups'.",
         app.profile.display_name, app.profile.id
     ));
-    let cancelled = crate::ui::dialog_buttons(ui, "Abbrechen", |ui| {
-        if ui.add(primary_button(ui, &icon_text(icons::ICON_DELETE, "Löschen"))).clicked() {
-            app.push(Action::ConfirmDeleteProfile);
-        }
-    });
+    let (cancelled, confirmed) = crate::ui::dialog_keys(ui, "ABBRUCH", "PROFIL LÖSCHEN", true, None);
     if cancelled {
         app.push(Action::CloseDialog);
+    }
+    if confirmed {
+        app.push(Action::ConfirmDeleteProfile);
     }
 }
 
 pub fn mark_verified_dialog(app: &mut DeckelApp, ui: &mut Ui) {
-    crate::ui::dialog_title(ui, icons::ICON_VERIFIED, "Profil als verifiziert markieren");
+    crate::ui::dialog_title(ui, "Profil als verifiziert markieren");
     let tester = app.extra.commissioning.as_ref().map(|r| r.tester.clone()).unwrap_or_default();
     ui.label(format!(
         "Profil '{}' als an der realen Maschine verifiziert kennzeichnen?\n\nPrüfer: {tester}\nMitgelieferte Standardprofile bleiben unverändert - es entsteht eine Kopie.",
         app.profile.display_name
     ));
-    ui.horizontal(|ui| {
-        if ui.button("Abbrechen").clicked() {
-            app.push(Action::CloseDialog);
-        }
-        if ui.button(RichText::new("Als verifiziert markieren").strong()).clicked() {
-            app.push(Action::CommConfirmVerify);
-        }
-    });
+    let (cancelled, confirmed) = crate::ui::dialog_keys(ui, "ABBRUCH", "ALS VERIFIZIERT MARKIEREN", true, None);
+    if cancelled {
+        app.push(Action::CloseDialog);
+    }
+    if confirmed {
+        app.push(Action::CommConfirmVerify);
+    }
 }
 
 /// Files dropped onto the window are loaded (never sent).

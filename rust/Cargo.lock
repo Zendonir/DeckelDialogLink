@@ -503,7 +503,7 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
 name = "deckellink-cli"
-version = "0.8.0-alpha.6"
+version = "0.8.0-alpha.7"
 dependencies = [
  "deckellink-core",
  "serde_json",
@@ -511,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "deckellink-core"
-version = "0.8.0-alpha.6"
+version = "0.8.0-alpha.7"
 dependencies = [
  "chrono",
  "proptest",
@@ -525,13 +525,12 @@ dependencies = [
 
 [[package]]
 name = "deckellink-gui"
-version = "0.8.0-alpha.6"
+version = "0.8.0-alpha.7"
 dependencies = [
  "chrono",
  "deckellink-core",
  "eframe",
  "egui",
- "egui_material_icons",
  "rfd",
  "serde_json",
 ]
@@ -713,15 +712,6 @@ dependencies = [
  "log",
  "profiling",
  "winit",
-]
-
-[[package]]
-name = "egui_material_icons"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a49b8d9217d02f0344160bff2f04fdc598f3244f65dc04ea7bf6ab74196d419c"
-dependencies = [
- "egui",
 ]
 
 [[package]]

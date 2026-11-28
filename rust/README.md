@@ -53,13 +53,19 @@ Diese Sicherheitsregeln gelten wie in Python:
 - Stürzt der Hintergrundvorgang ab, wird das als Fehler gemeldet. Das Programm selbst läuft weiter.
 - Maschinenparameter: Es gelten alle Schreibsperren aus Etappe 3. Die Freischaltung gilt nur für die laufende Sitzung.
 
-**Erscheinungsbild:**
-- Schriften: Inter für Text und JetBrains Mono für Daten und Code; beide sind eingebettet, siehe `crates/deckellink-gui/assets/fonts`.
-- Material-Symbole statt Emoji.
-- Dunkles Industrie-Design mit blauem Akzent, wahlweise hell oder wie das System (Einstellungen › Darstellung).
-- Kopfzeile mit Logo, Verbindungs- und Profilstatus.
-- Navigation in Gruppen; die Inhalte stehen in Karten.
-- Simulation ist in beiden Varianten immer gelb, Realbetrieb immer dunkelrot.
+**Aufbau:** wie in der Python-Version, der Arbeitsbereich ist der Bedienung der DIALOG 11 nachempfunden. Die Gestaltung ist eine eigene, keine Kopie des Originalbildschirms.
+- Oben Menüleiste (Datei, Ansicht, Werkzeuge, Hilfe) und Kopfleiste. Die Kopfleiste zeigt Maschine, Status, Schnittstelle, Profil sowie das Betriebsart-Banner: Simulation gelb mit schwarzem Strichrahmen, Realbetrieb dunkelrot.
+- Links stehen die nummerierten Seitentasten 1–8 in der Reihenfolge der Python-Version, darunter die Hilfsfunktionen HELP und Inbetriebnahme.
+- In der Mitte liegt der dunkle Bildschirm. Oben zeigt die gelbe Betriebsartenanzeige z. B. `1 ÜBERTRAGEN › BEREIT ZUM SENDEN`, darunter folgen umrahmte Anzeigebereiche in Monospace-Schrift.
+- Unter dem Bildschirm liegen die Softkeys F1–F8 mit den Aktionen der jeweiligen Seite. Sie sind auch über die Tasten F1–F8 bedienbar.
+  - Übertragungstasten sind in der Simulation gelb, im Realbetrieb dunkelrot.
+  - Jede Übertragung führt weiterhin über den Bestätigungsdialog.
+- Tastatur:
+  - Esc bricht einen laufenden Vorgang ab.
+  - Strg+1…8 wählt eine Seite.
+  - Strg+O öffnet eine Datei.
+  - Strg+Plus, Strg+Minus und Strg+0 ändern die Schriftgröße.
+- Schriften: Inter und JetBrains Mono, eingebettet, siehe `crates/deckellink-gui/assets/fonts`.
 
 Außerdem enthält die Oberfläche:
 - **Profileditor:** Mitgelieferte Profile werden nie überschrieben; beim Speichern entsteht ein Benutzerprofil. Technische Änderungen setzen den Status auf „nicht verifiziert“. Kopieren, Löschen (mit Sicherung), Import und Export sind möglich.

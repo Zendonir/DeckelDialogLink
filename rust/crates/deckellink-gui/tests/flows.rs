@@ -40,6 +40,25 @@ impl Harness {
         self.app.update();
     }
 
+    /// Press a key (like the F keys of the control) and draw a frame.
+    fn press(&mut self, key: egui::Key) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 900.0))),
+            events: vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..egui::RawInput::default()
+        };
+        let app = &mut self.app;
+        let mut output = self.ctx.run_ui(input, |ui| ui::show(app, ui));
+        output.textures_delta.clear();
+        self.app.update();
+    }
+
     fn act(&mut self, action: Action) {
         self.app.push(action);
         self.frame();
@@ -321,4 +340,48 @@ fn commissioning_marks_verified_copy() {
     assert!(h.app.profile.description.contains("Verifiziert am"));
     // reloaded record belongs to the verified copy
     assert_eq!(h.app.extra.commissioning.as_ref().unwrap().profile_id, h.app.profile.id);
+}
+
+#[test]
+fn softkeys_via_function_keys() {
+    let mut h = Harness::new("softkeys");
+    // F5 SENDEN is locked without a file: nothing happens
+    h.press(egui::Key::F5);
+    assert!(h.app.dialog.is_none());
+    let keys = ui::softkeys(&h.app);
+    assert!(!keys[4].as_ref().unwrap().enabled, "send key locked without a file");
+    // F3 loads the sample in simulation, F5 opens the confirmation (never sends directly)
+    h.press(egui::Key::F3);
+    assert!(h.app.program.is_some());
+    h.press(egui::Key::F5);
+    assert!(matches!(h.app.dialog, Some(Dialog::ConfirmSend { drip_feed: false, .. })));
+    assert!(!h.app.busy(), "F keys never start a transfer without confirmation");
+    // softkeys are ignored while a dialog is open
+    h.press(egui::Key::F1);
+    h.act(Action::CloseConfirm);
+    // Ctrl+number selects the page like the numbered keys
+    let input = egui::RawInput {
+        events: vec![egui::Event::Key {
+            key: egui::Key::Num6,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }],
+        ..egui::RawInput::default()
+    };
+    let app = &mut h.app;
+    let mut output = h.ctx.run_ui(input, |u| ui::show(app, u));
+    output.textures_delta.clear();
+    h.app.update();
+    assert_eq!(h.app.page, Page::Diagnostics);
+    // Diagnostics F2 runs the loopback test in simulation
+    h.press(egui::Key::F2);
+    h.wait_idle();
+    assert!(h.app.extra.loopback_result.is_some());
+    // every page has eight softkey positions and draws without errors
+    for page in Page::ALL {
+        h.act(Action::Navigate(page));
+        assert_eq!(ui::softkeys(&h.app).len(), 8);
+    }
 }
