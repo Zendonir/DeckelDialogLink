@@ -4,7 +4,7 @@
 
 DeckelLink ist eine lokale Desktop-Anwendung (Python, PySide6) zum Senden, Empfangen, Prüfen und Archivieren von NC-Programmen. Ein eingebauter Simulator erlaubt die vollständige Bedienung ohne Maschine.
 
-> **Verifikationsstatus:** Die Kommunikationsparameter der DIALOG 11 sind **nicht** an einer realen Maschine verifiziert. Beide mitgelieferten Profile sind Annahmen aus widersprüchlichen öffentlichen Angaben. Alle Tests dieses Projekts liefen ausschließlich gegen den Simulator. Siehe [docs/DIALOG11.md](docs/DIALOG11.md) und [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md).
+> **Verifikationsstatus:** Die Kommunikationsparameter der DIALOG 11 sind **nicht** an einer realen Maschine verifiziert. Die mitgelieferten Profile sind Annahmen. Alle Tests dieses Projekts liefen ausschließlich gegen den Simulator. Seit dem 28.11.2026 liegen die Original-Steuerungshandbücher 2 und 3 vor; Schnittstelle, Kabel, Dateiformat und LSV2/DNC-Protokoll sind daraus beschrieben, die Prüfsumme der Maschinendaten ist an echten Ausgaben nachgerechnet. Siehe [docs/DIALOG11.md](docs/DIALOG11.md), [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md) und – was die Maschine insgesamt kann – [docs/MASCHINE.md](docs/MASCHINE.md).
 
 ---
 
@@ -28,7 +28,7 @@ Mit einem LSV2-Profil (mitgeliefert: *DIALOG 11 – LSV2 4800 7E1 (Nachladebetri
 - **Senden / Empfangen** wie gewohnt, nur gesichert über Telegramme.
 - **Nachladebetrieb (LSV2) …** auf der Seite *Übertragen*: Die CNC fordert die Sätze während der Bearbeitung durch ihre Quittungen an. Der Programmstart erfolgt ausschließlich an der CNC. Vor dem Start erscheint ein eigener Warnhinweis mit Pflichtbestätigung; während des Nachladebetriebs wird der Windows-Standby unterdrückt.
 
-Rahmung, BCC-Bildung, Telegramminhalt, Start-/Endtelegramme und Timeouts sind im Profil (Reiter *Protokoll (LSV2)*) einstellbar, weil die genaue LSV2-Umsetzung der DIALOG 11 nicht verifiziert ist ([docs/DIALOG11.md](docs/DIALOG11.md)). Simulator-Szenarien `LSV2: …` testen Nachladebetrieb, NAK, verlorene Quittungen, WACK, CNC-Abbruch und Verbindungsabbruch.
+Rahmung, BCC-Bildung, Telegramminhalt, Start-/Endtelegramme und Timeouts sind im Profil (Reiter *Protokoll (LSV2)*) einstellbar, weil die genaue LSV2-Umsetzung der DIALOG 11 nicht verifiziert ist ([docs/DIALOG11.md](docs/DIALOG11.md)). **Hinweis:** Laut Steuerungshandbuch 3 läuft die Übertragung über DNC-Telegramme (`TDPP`, `PRPP`, `R_PP`, `T_NB`, `T_FD` …), die DeckelLink noch nicht umsetzt; die Abweichungen sind in [docs/DIALOG11.md](docs/DIALOG11.md) aufgelistet. Simulator-Szenarien `LSV2: …` testen Nachladebetrieb, NAK, verlorene Quittungen, WACK, CNC-Abbruch und Verbindungsabbruch.
 
 ## RS-232/Ethernet-Adapter
 

@@ -2,6 +2,15 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Dokumentation
+- Neu: `docs/MASCHINE.md` – was die FP2A mit DIALOG 11 kann und was nicht (Softwarestände, Messtaster, Digitalisieren, Spindelposition, Wege zur PC-Kopplung).
+- `docs/DIALOG11.md`: Angaben aus den Steuerungshandbüchern 2 und 3 (Softwarestand 4) zu Anschlüssen, Schnittstellen-Konfiguration, Betriebsarten, Dateiformat und LSV2/DNC-Protokoll; Liste der Abweichungen der aktuellen LSV2-Umsetzung vom Handbuch.
+- Prüfsumme der Maschinendaten-Gruppen an drei echten Ausgaben nachgerechnet (69 von 69 Gruppen).
+- `docs/CABLE.md`: Pinbelegung der Steuerung und Originalkabel 25/25 und 25/9 laut Handbuch.
+- `docs/VERIFICATION_CHECKLIST.md`: neue Spalte „Laut Unterlagen“.
+
 ## [Rust 0.8.0-alpha.11] – 2026-11-28
 
 ### Behoben (Release)
