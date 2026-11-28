@@ -150,6 +150,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         "param-write" => params::param_write(rest),
         "param-json" => params::param_json(rest),
         "diag-json" => diag_json(rest),
+        "sim-json" => sim_json(rest),
         "analyze-json" => {
             let [profile_file, file] = rest else {
                 return Err(USAGE.into());
@@ -203,6 +204,79 @@ fn diag_json(args: &[String]) -> Result<ExitCode, String> {
         "{}",
         json!({"report": guess.report(), "frame": guess.frame(), "confidence": guess.confidence, "patterns": patterns})
     );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Hidden: `sim-json <program-file> <config-json>` - DIALOG 11 simulation result (parity test).
+fn sim_json(args: &[String]) -> Result<ExitCode, String> {
+    use deckellink_core::sim::model::{Move, SimConfig, ToolData};
+    let [file, config_text] = args else { return Err(USAGE.into()) };
+    let bytes = std::fs::read(file).map_err(|e| e.to_string())?;
+    let text = String::from_utf8_lossy(&bytes);
+    let raw: serde_json::Value = serde_json::from_str(config_text).map_err(|e| e.to_string())?;
+    let mut config = SimConfig::default();
+    let number = |key: &str| raw.get(key).and_then(serde_json::Value::as_f64);
+    let triple = |value: &serde_json::Value| -> [f64; 3] {
+        let at = |i: usize| value.get(i).and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+        [at(0), at(1), at(2)]
+    };
+    if let Some(v) = number("rapid_feed") {
+        config.rapid_feed = v;
+    }
+    if let Some(v) = raw.get("start") {
+        config.start_position = triple(v);
+    }
+    if let Some(v) = raw.get("max_blocks").and_then(serde_json::Value::as_u64) {
+        config.max_blocks = usize::try_from(v).unwrap_or(usize::MAX);
+    }
+    if let Some(v) = raw.get("max_points").and_then(serde_json::Value::as_u64) {
+        config.max_points = usize::try_from(v).unwrap_or(usize::MAX);
+    }
+    for (key, value) in raw.get("tools").and_then(serde_json::Value::as_object).into_iter().flatten() {
+        if let (Ok(n), Some(r)) = (key.parse::<i64>(), value.as_f64()) {
+            config.tools.insert(n, ToolData::with_radius(r));
+        }
+    }
+    for (key, value) in raw.get("zeros").and_then(serde_json::Value::as_object).into_iter().flatten() {
+        if let Ok(n) = key.parse::<i64>() {
+            config.zero_points.insert(n, triple(value));
+        }
+    }
+    for (key, value) in raw.get("params").and_then(serde_json::Value::as_object).into_iter().flatten() {
+        config.parameter_table.insert(key.clone(), value.as_str().unwrap_or_default().to_string());
+    }
+    let result = deckellink_core::sim::simulate(&text, &config);
+    let moves = |list: &[Move]| -> Vec<serde_json::Value> {
+        list.iter()
+            .map(|m| {
+                json!([
+                    m.kind.value(),
+                    m.points,
+                    m.line,
+                    m.program,
+                    m.state,
+                    m.feed,
+                    m.length,
+                    m.duration,
+                    m.note,
+                    m.compensated
+                ])
+            })
+            .collect()
+    };
+    let out = json!({
+        "end_reason": result.end_reason,
+        "executed_blocks": result.executed_blocks,
+        "parameters": result.parameters,
+        "program_labels": result.program_labels,
+        "messages": result.messages.iter().map(|m| json!([m.severity.value(), m.text, m.line, m.program])).collect::<Vec<_>>(),
+        "moves": moves(&result.moves),
+        "programmed": moves(&result.programmed),
+        "snapshots": result.snapshots.iter().map(|s| json!([s.line, s.program, s.position, s.modal, s.tool,
+            s.tool_radius, s.feed, s.speed, s.spindle, s.c_axis])).collect::<Vec<_>>(),
+        "dwells": result.dwells.iter().map(|d| json!([d.seconds, d.line, d.state, d.after_move])).collect::<Vec<_>>(),
+    });
+    println!("{out}");
     Ok(ExitCode::SUCCESS)
 }
 

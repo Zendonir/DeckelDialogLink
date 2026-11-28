@@ -40,6 +40,7 @@ from deckellink.dialog11sim.syntax import (
     split_programs,
 )
 
+MAX_RESOLVE_DEPTH = 64  # nested parameter references (self-referencing table entries)
 _COMPARE_RE = re.compile(r"^(.*?)(>=|<=|<>|==|=|>|<)(.*)$")
 COORD_AXES = ("X", "Y", "Z")
 CENTER_AXES = ("I", "J", "K")
@@ -159,6 +160,7 @@ class Interpreter:
         self._line = 0
         self._warned: set[str] = set()
         self._feed_warned = False
+        self._resolve_depth = 0
 
     # ------------------------------------------------------------------ public
     def run(self) -> SimResult:
@@ -171,7 +173,10 @@ class Interpreter:
             self.result.end_reason = stop.reason
         if self.comp is not None:
             self._msg(Severity.WARNING, "Bahnkorrektur am Programmende nicht mit G40 abgewählt.")
-            self._flush_compensation(None, None)
+            try:
+                self._flush_compensation(None, None)
+            except SimulationStop as stop:
+                self.result.end_reason = stop.reason
         self.result.executed_blocks = self.blocks_run
         self.result.parameters = {k: (f"{v:g}" if isinstance(v, float) else v) for k, v in self.memory.items()}
         return self.result
@@ -330,12 +335,18 @@ class Interpreter:
 
     # ------------------------------------------------------------------ parameters
     def resolve(self, name: str) -> float:
-        value = self._lookup(name)
-        if isinstance(value, str):
-            if is_arithmetic(value):
-                return evaluate(value, self.resolve)
-            raise ExpressionError(f"{name} enthält keinen Zahlenwert ('{value}')")
-        return value
+        if self._resolve_depth >= MAX_RESOLVE_DEPTH:
+            raise ExpressionError("Parameter-Verweise zu tief verschachtelt")
+        self._resolve_depth += 1
+        try:
+            value = self._lookup(name)
+            if isinstance(value, str):
+                if is_arithmetic(value):
+                    return evaluate(value, self.resolve)
+                raise ExpressionError(f"{name} enthält keinen Zahlenwert ('{value}')")
+            return value
+        finally:
+            self._resolve_depth -= 1
 
     def _lookup(self, name: str) -> float | str:
         table_only = name.startswith(("PT", "PPT"))

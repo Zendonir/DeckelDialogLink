@@ -23,6 +23,7 @@ pub mod parameters;
 pub mod profile;
 pub mod profilestore;
 pub mod scenarios;
+pub mod sim;
 pub mod storage;
 pub mod transfer;
 pub mod transport;

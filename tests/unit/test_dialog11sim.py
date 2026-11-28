@@ -389,3 +389,17 @@ def test_demo_program_runs_cleanly() -> None:
     assert result.end_reason.startswith("M30") and not result.errors and not result.warnings
     assert result.bounds() is not None and result.total_time_s > 0
     assert len(FUNCTION_REFERENCE) > 30
+
+
+def test_self_referencing_parameter_is_an_error_not_a_crash() -> None:
+    config = SimConfig(parameter_table={"P8": "(P8 + 1)"})
+    result = simulate("N10 G1 XP8 F100\nN20 M30\n", config)
+    assert [m.text for m in result.errors] == ["Parameter-Verweise zu tief verschachtelt"]
+    assert result.end_reason.startswith("M30")
+
+
+def test_point_limit_during_final_compensation_flush_ends_cleanly() -> None:
+    config = SimConfig(max_points=6, tools={1: ToolData(radius=2.0)})
+    text = "N10 T1\nN20 G41 X10 Y0\nN30 G1 X20 F100\nN40 X30\nN50 X40\n"
+    result = simulate(text, config)
+    assert result.end_reason == "Abbruch: zu viele Bahnpunkte"

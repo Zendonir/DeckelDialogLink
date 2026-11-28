@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import subprocess
 import sys
@@ -420,6 +421,301 @@ def diagnostics_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random)
     return failures
 
 
+SIM_COORD = ["X", "Y", "Z", "XI", "YI", "ZI", "XA", "YA", "ZA"]
+
+
+def _num(rng: random.Random) -> str:
+    value = rng.choice([0, 1, 2, 5, 10, 12.5, 20, 25, 33.3, 40, 50, 100, 0.5, 3, 7])
+    sign = rng.choice(["", "", "-"])
+    return f"{sign}{value}"
+
+
+def _sim_value(rng: random.Random) -> str:
+    if rng.random() < 0.12:
+        return rng.choice(["P1", "-P2", "P3", "PP1", "PT4", "P9", "PT8"])
+    return _num(rng)
+
+
+def _sim_block(rng: random.Random, n: int) -> str:
+    kind = rng.random()
+    words: list[str] = []
+    if kind < 0.35:
+        words.append(rng.choice(["G0", "G1", "G0.1", "G0.2", "G1", "G2", "G3", ""]))
+        for axis in rng.sample(SIM_COORD, rng.randint(0, 3)):
+            words.append(axis + _sim_value(rng))
+        if rng.random() < 0.3:
+            words.append(rng.choice(["I", "J", "IA", "JI", "K", "R"]) + _sim_value(rng))
+        if rng.random() < 0.15:
+            words.append(rng.choice(["G9", "PW45", "PL20", "PX10", "W30", "WI90", "C90", "UW5"]))
+        if rng.random() < 0.3:
+            words.append("F" + rng.choice(["100", "250", "0", "P1"]))
+    elif kind < 0.45:
+        words.append(rng.choice(["G41", "G42", "G40", "G41 G47 R5", "G42 G45 R3", "G40 G46 R4", "G40 G47 R5"]))
+        for axis in rng.sample(["X", "Y"], rng.randint(0, 2)):
+            words.append(axis + _num(rng))
+    elif kind < 0.55:
+        cycle = rng.choice(
+            [
+                "G81",
+                "G82",
+                "G83",
+                "G84",
+                "G85",
+                "G86",
+                "G87.1",
+                "G87.2",
+                "G87.3",
+                "G87.4",
+                "G87.5",
+                "G87.9",
+                "G87.7",
+                "G89.1",
+                "G89.2",
+                "G89",
+            ]
+        )
+        words.append(cycle)
+        for address in rng.sample(
+            [
+                "OA0",
+                "OI2",
+                "TI8",
+                "TA-5",
+                "SI2",
+                "SA3",
+                "EA10",
+                "EI5",
+                "MI2",
+                "DI0.5",
+                "ST1.5",
+                "LI40",
+                "BI30",
+                "D20",
+                "DR40",
+                "AM4",
+                "R3",
+                "FA1",
+                "DW30",
+                "FZ80",
+                "FE200",
+                "LL3",
+                "LX10",
+                "LY5",
+                "BL2",
+                "BX8",
+                "AW0",
+                "L4",
+                "TW45",
+                "EW180",
+                "P5",
+                "G2",
+                "G4 F1",
+                "G1",
+                "B10",
+                "BWI0",
+                "LW30",
+            ],
+            rng.randint(0, 9),
+        ):
+            words.append(address)
+    elif kind < 0.62:
+        words.append(rng.choice(["G17", "G18", "G19", "G90", "G91", "G60.1", "G64", "G61", "G70", "G4 F2"]))
+    elif kind < 0.7:
+        words.append(
+            rng.choice(
+                [
+                    "G51.1",
+                    "G51.3",
+                    "G53",
+                    "G54 X0 Y0",
+                    "G55 X10 W15",
+                    "G56 X5 Y5 W-10",
+                    "G58 X0",
+                    "G58",
+                    "G59 X2",
+                    "G59 X-1 Y1",
+                    "G59 Z0",
+                ]
+            )
+        )
+    elif kind < 0.78:
+        words.append(
+            rng.choice(["T1 M6", "T2", "T0", "TT3", "M3 S1200", "M4", "M5", "M8", "M60", "M79", "M17", "S500"])
+        )
+    elif kind < 0.86:
+        target = rng.choice(["P1", "P2", "P3", "PP1"])
+        expr = rng.choice(
+            [
+                "0",
+                "(P1 + 1)",
+                "(P2 x 2)",
+                "SIN 30",
+                "(SQRT P1)",
+                "(10 : P2)",
+                "G1 X5",
+                "%*1",
+                "(1/0)",
+                "(ASIN 2)",
+                "P1 + 2",
+                "(RND 2.5)",
+                "(INT -3.7)",
+                "(FRC 1.25)",
+            ]
+        )
+        words.append(f"{target} = {expr}")
+    elif kind < 0.92:
+        words.append(
+            rng.choice(
+                [
+                    "IF P1 < 3 THEN L0 N30",
+                    "IF P2 >= 1 THEN P1 = 5 ELSE P1 = 0",
+                    "IF P1 <> P2 THEN G0 X1",
+                    "IF P1 THEN G0",
+                    "P4!",
+                    "P3",
+                    "PP1",
+                ]
+            )
+        )
+    elif kind < 0.97:
+        words.append(rng.choice(["%*1", "L2 %*1", "%%4", "%*7", "L2 N20 N40", "L0 N50", "L3 N10 N10"]))
+    else:
+        words.append(rng.choice(["Q?", "XYZ1", "(KOMMENTAR)", "G1 X(1", "N", "G", "GP1", "M30", "M2"]))
+    text = " ".join(w for w in words if w)
+    if rng.random() < 0.1:
+        text += "; " + rng.choice(["M3", "F150", "P2 = 1", "G0 Z50"])
+    return f"N{n} {text}"
+
+
+def random_sim_program(rng: random.Random) -> str:
+    lines = [_sim_block(rng, 10 * (i + 1)) for i in range(rng.randint(1, 40))]
+    if rng.random() < 0.6:
+        lines.append(rng.choice(["M30", "N999 M30", "M2"]))
+    if rng.random() < 0.4:
+        lines.append("%*1")
+        lines.extend(_sim_block(rng, 10 * (i + 1)) for i in range(rng.randint(1, 6)))
+        lines.append("M17")
+    if rng.random() < 0.15:
+        lines.append("%%4")
+        lines.append("N10 G1 XI5 F100")
+    return "\n".join(lines) + "\n"
+
+
+def _close(a: Any, b: Any) -> bool:
+    if isinstance(a, float | int) and isinstance(b, float | int) and not isinstance(a, bool):
+        return math.isclose(float(a), float(b), rel_tol=1e-7, abs_tol=1e-6)
+    if isinstance(a, list | tuple) and isinstance(b, list | tuple):
+        return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b, strict=True))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_close(a[k], b[k]) for k in a)
+    return bool(a == b)
+
+
+def python_sim(text: str, config: dict[str, Any]) -> dict[str, Any]:
+    from deckellink.dialog11sim.interpreter import simulate
+    from deckellink.dialog11sim.model import SimConfig, ToolData
+
+    sim_config = SimConfig(
+        rapid_feed=config["rapid_feed"],
+        start_position=tuple(config["start"]),
+        tools={int(k): ToolData(radius=v) for k, v in config["tools"].items()},
+        zero_points={int(k): tuple(v) for k, v in config["zeros"].items()},
+        parameter_table=dict(config["params"]),
+        max_blocks=config["max_blocks"],
+        max_points=config["max_points"],
+    )
+    result = simulate(text, sim_config)
+
+    def moves(items: list[Any]) -> list[Any]:
+        return [
+            [
+                m.kind.value,
+                [list(p) for p in m.points],
+                m.line,
+                m.program,
+                m.state,
+                m.feed,
+                m.length,
+                m.duration,
+                m.note,
+                m.compensated,
+            ]
+            for m in items
+        ]
+
+    return {
+        "end_reason": result.end_reason,
+        "executed_blocks": result.executed_blocks,
+        "parameters": [list(item) for item in result.parameters.items()],
+        "program_labels": result.program_labels,
+        "messages": [[m.severity.value, m.text, m.line, m.program] for m in result.messages],
+        "moves": moves(result.moves),
+        "programmed": moves(result.programmed),
+        "snapshots": [
+            [
+                s.line,
+                s.program,
+                list(s.position),
+                [list(i) for i in s.modal],
+                s.tool,
+                s.tool_radius,
+                s.feed,
+                s.speed,
+                s.spindle,
+                s.c_axis,
+            ]
+            for s in result.snapshots
+        ],
+        "dwells": [[d.seconds, d.line, d.state, d.after_move] for d in result.dwells],
+    }
+
+
+def simulator_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random) -> int:
+    """DIALOG 11 simulator: demo program plus random programs (floats compared with tolerance)."""
+    from deckellink.dialog11sim.reference import DEMO_PROGRAM
+
+    failures = 0
+    for case in range(cases):
+        text = DEMO_PROGRAM if case == 0 else random_sim_program(rng)
+        config = {
+            "rapid_feed": rng.choice([5000.0, 2500.0]),
+            "start": rng.choice([[0.0, 0.0, 100.0], [10.0, -5.0, 50.0]]),
+            "tools": rng.choice([{}, {"1": 4.0, "2": 6.0}, {"1": 0.0, "3": 2.5}]),
+            "zeros": rng.choice([{}, {"1": [100.0, 50.0, 0.0]}]),
+            "params": rng.choice(
+                [{}, {"P4": "(P1 + 2)", "P5": "G1 X10 F100", "P9": "7", "PP1": "G0 Z20", "P8": "(P8 + 1)"}]
+            ),
+            "max_blocks": 3000,
+            "max_points": 200000,
+        }
+        path = tmp_dir / "sim.nc"
+        path.write_text(text, encoding="utf-8")
+        completed = subprocess.run(
+            [str(cli), "sim-json", str(path), json.dumps(config)], capture_output=True, check=False
+        )
+        rust = json.loads(completed.stdout) if completed.returncode == 0 else {"error": completed.stderr.decode()}
+        python = python_sim(text, config)
+        if not _close(rust, python):
+            failures += 1
+            if failures <= 3:
+                print(f"--- simulator case {case} differs (config={config})\n{text}")
+                for key, value in python.items():
+                    other = rust.get(key)
+                    if not _close(value, other):
+                        if isinstance(value, list) and isinstance(other, list):
+                            index = next(
+                                (i for i, (a, b) in enumerate(zip(value, other, strict=False)) if not _close(a, b)),
+                                None,
+                            )
+                            print(f"  {key}: len python={len(value)} rust={len(other)} first diff at {index}")
+                            if index is not None:
+                                print(f"    python={value[index]}\n    rust  ={other[index]}")
+                        else:
+                            print(f"  {key}:\n    python={value}\n    rust  ={other}")
+    print(f"{cases} simulator cases, {failures} differences")
+    return failures
+
+
 def lsv2_parity(cli: Path, tmp_dir: Path) -> int:
     lsv2_json = json.loads((builtin_profiles_dir() / "dialog11_lsv2_7e1.json").read_text(encoding="utf-8"))
     failures = 0
@@ -492,6 +788,7 @@ def main() -> int:
         failures += lsv2_parity(args.cli, tmp_dir)
         failures += parameter_parity(args.cli, tmp_dir, max(args.cases // 2, 50), rng)
         failures += diagnostics_parity(args.cli, tmp_dir, max(args.cases // 4, 50), rng)
+        failures += simulator_parity(args.cli, tmp_dir, max(args.cases // 2, 50), rng)
     return 1 if failures else 0
 
 
