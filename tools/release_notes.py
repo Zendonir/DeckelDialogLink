@@ -69,7 +69,10 @@ def main(argv: list[str]) -> int:
         print("usage: release_notes.py [--rust] <version>", file=sys.stderr)
         return 2
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    sys.stdout.write(build_notes(args[0], changelog, rust=rust))
+    notes = build_notes(args[0], changelog, rust=rust)
+    # always UTF-8: the Windows console code page (cp1252) cannot encode characters like "→"
+    sys.stdout.buffer.write(notes.encode("utf-8"))
+    sys.stdout.flush()
     return 0
 
 
