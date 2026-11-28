@@ -11,6 +11,18 @@ Hinweis: Der Installer ist nicht code-signiert. Windows SmartScreen kann deshalb
 
 Stille Installation (z. B. Softwareverteilung): `DeckelLink-<version>-Setup-x64.exe /VERYSILENT /CURRENTUSER`.
 
+## Rust-Version (Vorschau)
+
+Die Rust-Version ist ein Neubau mit demselben Funktionsumfang und denselben Sicherheitsregeln. Sie nutzt dieselben Daten wie die Python-Version (`%LOCALAPPDATA%\DeckelLink`: Einstellungen, Profile, Empfangsarchiv, Programmverwaltung, Werkzeugtabelle).
+
+1. Aus den GitHub-Actions-Artefakten des Workflows „Rust“ `DeckelLink-Rust-<version>-Setup-x64.exe` herunterladen (Artefakt `deckellink-rust-setup-windows`).
+2. Setup starten, ebenfalls **ohne Administratorrechte**. Installiert wird nach `%LOCALAPPDATA%\Programs\DeckelLink-Rust`, also **neben** einer vorhandenen Python-Version. Beide Programme bitte nicht gleichzeitig mit derselben Schnittstelle betreiben.
+3. Startmenü: „DeckelLink (Rust)“, „DeckelLink (Rust) (Simulationsmodus)“ und das Handbuch. Optional „Öffnen mit“ für `.nc`-Dateien.
+4. Selbsttest ohne Fenster: `deckellink.exe --smoke-test --smoke-report %TEMP%\dlr.json` (Exit-Code 0 = OK; läuft immer im Simulationsmodus, öffnet keinen Port).
+5. Deinstallieren über Windows-Einstellungen → Apps. Die gemeinsamen Daten bleiben erhalten.
+
+Startparameter wie bei der Python-Version: `--data-dir <Ordner>`, `--simulate`, `--smoke-test`, `--smoke-report <Datei>`, `--version` und optional eine NC-Datei (wird nur geladen und geprüft, nicht gesendet).
+
 ## Portable Windows-Anwendung (Anwender)
 
 1. ZIP `DeckelLink-<version>-windows-x64.zip` aus den GitHub-Actions-Artefakten bzw. dem Release herunterladen.
@@ -55,10 +67,10 @@ Ein Onefile-Build entpackt bei jedem Start ca. 100–200 MB PySide6-Bibliotheken
 Installer selbst bauen (Inno Setup 6 installiert):
 
 ```bash
-iscc /DAppVersion=0.5.0 installer\deckellink.iss
+iscc /DAppVersion=0.7.0 installer\deckellink.iss
 ```
 
-Ergebnis: `dist\installer\DeckelLink-0.5.0-Setup-x64.exe`.
+Ergebnis: `dist\installer\DeckelLink-0.7.0-Setup-x64.exe`.
 
 ### Release erstellen
 Version in `src/deckellink/version.py` und `CHANGELOG.md` pflegen, dann Tag `v<version>` pushen. Der Workflow `build-windows.yml` baut, testet (auch eine stille Installation mit Selbsttest und Deinstallation) und veröffentlicht das GitHub-Release mit Installer, ZIP und Prüfsummen. Versionen `0.x` werden als Vorabversion markiert.

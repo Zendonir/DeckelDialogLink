@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 from deckellink.clock import Clock, SystemClock
 from deckellink.domain.models import ProtocolSettings, SerialSettings
+from deckellink.nc.checks import split_eot_trailer
 from deckellink.transfer.lsv2 import (
     ACK0,
     ACK1,
@@ -262,7 +263,7 @@ class Lsv2SimulatedCnc:
 
     # -- CNC as sender -----------------------------------------------------------
     def _split_program(self) -> list[bytes]:
-        data = self.config.program
+        data, _trailer = split_eot_trailer(self.config.program)
         if not data:
             return []
         lines = data.splitlines(keepends=True)

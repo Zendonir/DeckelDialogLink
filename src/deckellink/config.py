@@ -41,6 +41,9 @@ class AppConfig:
     recent_files: list[str] = field(default_factory=list)
     font_scale_percent: int = 100
     simulation_replay_file: str = ""
+    tool_export_header: str = ""
+    tool_export_line: str = ""
+    tool_export_footer: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

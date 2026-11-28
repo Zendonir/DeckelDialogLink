@@ -29,6 +29,13 @@ Diese Regeln gelten dauerhaft für alle Änderungen in diesem Repository.
 - Maschinenparameter nur als Datei: Auslesen nach Ausgabe an der CNC, Schreiben nur in eine an der CNC freigegebene Parametereingabe. Keine Fernbefehle zum Lesen/Ändern von Parametern. Die Schreibsperren (Profil `parameters.allow_write` standardmäßig aus, Freischaltung nur pro Sitzung, aktuelle Sicherung, Diff, getippte Bestätigung, Kontrolle durch erneutes Auslesen) dürfen nicht abgeschwächt werden.
 - Mitgelieferte Profile (`src/deckellink/resources/profiles/`) bleiben `unverified`, bis eine Prüfung an der realen FP2A dokumentiert ist.
 
+## Rust-Neubau (`rust/`)
+- Vom Benutzer freigegeben (2026-11-26): schrittweiser Neubau in Rust für maximale Stabilität; die Python-Version bleibt bis zur Gleichwertigkeit bestehen. Alle Sicherheitsregeln oben gelten unverändert auch für Rust.
+- Kernbibliothek ohne `unsafe`, ohne `unwrap`/`expect`/`panic`/ungeprüfte Indizes (Workspace-Lints); Fehler als Werte mit deutscher Meldung.
+- Mitgelieferte Profile nur in `src/deckellink/resources/profiles/` pflegen (Rust bindet sie ein).
+- Verhalten muss mit Python übereinstimmen: `python tools/rust_parity.py` (nach `cargo build --release`) muss 0 Abweichungen melden.
+- Vor Abschluss: `cd rust && cargo fmt --all --check && cargo clippy --all-targets -- -D warnings && cargo test --all`.
+
 ## Qualität – vor jedem Abschluss ausführen
 ```bash
 export QT_QPA_PLATFORM=offscreen   # headless

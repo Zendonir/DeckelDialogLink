@@ -1,0 +1,18 @@
+[package]
+name = "deckellink-cli"
+description = "DeckelLink command line (checks, preparation, simulator)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "deckellink-cli"
+path = "src/main.rs"
+
+[dependencies]
+deckellink-core = { path = "../deckellink-core" }
+serde_json = "1"

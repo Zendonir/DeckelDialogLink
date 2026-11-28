@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +29,8 @@ from deckellink.transport.base import ModemStatus, Transport
 log = logging.getLogger(__name__)
 
 READ_SIZE = 256
+_EOT_AFTER_END_RE = re.compile(rb"([\x00\r\n]*\x04)(\r?\n)?")
+_EOT_AFTER_END_FINAL_RE = re.compile(rb"[\x00\r\n]*\x04(?:\r?\n|\r)?")
 SEARCH_OVERLAP = 64
 
 
@@ -125,6 +128,9 @@ class ProgramReceiver:
         final_state = ReceiveState.FAILED
         detector = EndSequenceDetector(settings.end_sequence)
         end_seen_mono: float | None = None
+        eot_mono: float | None = None
+        eot_index = -1
+        grace_s = settings.end_grace_ms / 1000.0
         log.info("Receive start: profile=%s port=%s", self.profile.id, self.transport.name)
         try:
             self.token.raise_if_cancelled()
@@ -168,6 +174,16 @@ class ProgramReceiver:
                     buffer += chunk
                     self._traffic(chunk, wall)
                     self._progress(len(buffer), now - t0, 0.0)
+                    if settings.end_on_eot and eot_mono is None and b"\x04" in chunk:
+                        eot_mono = now
+                        eot_index = len(buffer) - len(chunk) + chunk.index(b"\x04")
+                        log.info("EOT (end of transmission) received")
+                    if eot_mono is not None:
+                        if b"\n" in buffer[eot_index + 1 :] or now - eot_mono >= grace_s:
+                            end_reason = EndReason.EOT
+                            final_state = ReceiveState.COMPLETED
+                            break
+                        continue
                     if (
                         settings.end_detection.uses_end_sequence
                         and end_seen_mono is None
@@ -180,6 +196,8 @@ class ProgramReceiver:
                     ):
                         end_reason = EndReason.END_SEQUENCE
                         final_state = ReceiveState.COMPLETED
+                        if settings.end_on_eot and self._capture_trailing_eot(buffer, grace_s):
+                            end_reason = EndReason.EOT
                         break
                     if end_seen_mono is not None and now - end_seen_mono >= settings.end_grace_ms / 1000.0:
                         end_reason = EndReason.END_SEQUENCE
@@ -200,6 +218,10 @@ class ProgramReceiver:
                     continue
                 idle = now - last_mono
                 self._progress(len(buffer), now - t0, idle)
+                if eot_mono is not None and now - eot_mono >= grace_s:
+                    end_reason = EndReason.EOT
+                    final_state = ReceiveState.COMPLETED
+                    break
                 if end_seen_mono is not None and now - end_seen_mono >= settings.end_grace_ms / 1000.0:
                     end_reason = EndReason.END_SEQUENCE
                     final_state = ReceiveState.COMPLETED
@@ -246,6 +268,34 @@ class ProgramReceiver:
             last_byte_at=last_at,
             error=error,
         )
+
+    def _capture_trailing_eot(self, buffer: bytearray, grace_s: float) -> bool:
+        """After the program end, take over an immediately following EOT (+ line end).
+
+        Other data after the program end is not read (as before).
+        """
+        deadline = self.clock.monotonic() + grace_s
+        tail = bytearray()
+        while self.clock.monotonic() < deadline:
+            chunk = self.transport.read(16)
+            if not chunk:
+                continue
+            tail += chunk
+            self._traffic(chunk, self.clock.now())
+            match = _EOT_AFTER_END_RE.match(bytes(tail))
+            if match is None:
+                if tail.strip(b"\x00\r\n"):
+                    log.info("Data after program end ignored (%d bytes)", len(tail))
+                    return False
+                continue
+            if match.group(2):  # line end after EOT received
+                buffer += match.group(0)
+                return True
+        final = _EOT_AFTER_END_FINAL_RE.match(bytes(tail))
+        if final is not None:
+            buffer += final.group(0)
+            return True
+        return False
 
     def _traffic(self, data: bytes, when: datetime) -> None:
         if data and self.callbacks.on_traffic:

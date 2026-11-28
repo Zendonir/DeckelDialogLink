@@ -25,12 +25,30 @@ SAMPLE_PROGRAM = (
     b"N110 M30\r\n"
 )
 
+
 # Clearly artificial parameter list for the simulator. This is NOT the DIALOG 11
 # parameter format (which is not verified) - it only exercises the data path.
+def _sample_group(number: int, name: bytes, lines: list[bytes]) -> bytes:
+    # Structure as observed on a real DIALOG 11 (group, "?", checksum line). The
+    # checksums are placeholders: the real algorithm is unknown.
+    return b"%%MPG%02d (%s)\r\n" % (number, name) + b"".join(lines) + b"?\r\nC%03d\r\n" % number
+
+
 SAMPLE_PARAMETERS = (
-    b"(SIMULIERTE MASCHINENPARAMETER - KEIN ECHTES DIALOG-11-FORMAT)\r\n"
-    + b"".join(b"P%04d=%d\r\n" % (n, (n * 37) % 1000) for n in range(1, 41))
-    + b"(ENDE SIMULATION)\r\n"
+    _sample_group(
+        0,
+        b"KOPF",
+        [
+            b"M65000 SIMULATION\r\n",
+            b"M65002 SIM     0.000\r\n",
+            b"M65033 SIMULATOR\r\n",
+            b"M65034 0000-0000\r\n",
+            b"M65035 01.01.26\r\n",
+        ],
+    )
+    + _sample_group(1, b"SIMULATION", [b"M01%03d %d\r\n" % (n, (n * 37) % 1000) for n in range(1, 21)])
+    + _sample_group(2, b"SIMULATION", [b"M02%03d %d\r\n" % (n, (n * 53) % 1000) for n in range(1, 21)])
+    + b"\x04\r\n"
 )
 
 INVALID_PROGRAM = b"(PROGRAMM MIT UNG\xdcLTIGEN ZEICHEN)\r\nN10 G90\r\nN20 G00 X10 Y10 \x1b\r\nN30 M30\r\n"

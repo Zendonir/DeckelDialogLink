@@ -1,0 +1,121 @@
+name: Rust
+
+on:
+  push:
+    branches: ["**"]
+    paths: ["rust/**", "src/deckellink/resources/profiles/**", "src/deckellink/nc/**", "src/deckellink/parameters/**", "src/deckellink/diagnostics/**", "src/deckellink/transfer/**", "src/deckellink/dialog11sim/**", "README.md", "docs/**", "tools/rust_parity.py", "installer/**", "tools/release_notes.py", "src/deckellink/storage/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["rust/**", "src/deckellink/resources/profiles/**", "src/deckellink/nc/**", "src/deckellink/parameters/**", "src/deckellink/diagnostics/**", "src/deckellink/transfer/**", "src/deckellink/dialog11sim/**", "README.md", "docs/**", "tools/rust_parity.py", "installer/**", "tools/release_notes.py", "src/deckellink/storage/**", ".github/workflows/rust.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt, clippy, test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rust toolchain
+        run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy (stability lints, warnings are errors)
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Tests
+        run: cargo test --all --locked
+      - name: Release build
+        run: cargo build --release --locked
+      - name: Smoke test of the application (headless, simulation only)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        working-directory: .
+        run: |
+          $p = Start-Process -FilePath rust\target\release\deckellink.exe `
+            -ArgumentList "--smoke-test","--data-dir","$env:RUNNER_TEMP\dlr-smoke","--smoke-report","$env:RUNNER_TEMP\smoke.json" `
+            -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\smoke.json"
+          if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
+      - name: Build installer (Inno Setup)
+        if: matrix.os == 'windows-latest'
+        id: installer
+        shell: pwsh
+        working-directory: .
+        run: |
+          $version = (Select-String -Path rust\Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $numeric = ($version -split '-')[0]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found" }
+          & $iscc "/DAppVersion=$version" "/DNumericVersion=$numeric" installer\deckellink-rust.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with $LASTEXITCODE" }
+      - name: Test installer (silent install, smoke test, uninstall keeps user data)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        working-directory: .
+        run: |
+          $setup = "dist\installer\DeckelLink-Rust-${{ steps.installer.outputs.version }}-Setup-x64.exe"
+          $dir = "$env:RUNNER_TEMP\dlr-install"
+          $p = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Setup failed with exit code $($p.ExitCode)" }
+          foreach ($f in @("deckellink.exe", "deckellink-cli.exe", "README.md", "LICENSE", "docs\SAFETY.md", "licenses\LICENSE-Inter.txt")) {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "Installed file missing: $f" }
+          }
+          $exe = Join-Path $dir "deckellink.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test","--data-dir","$env:RUNNER_TEMP\dlr-installed","--smoke-report","$env:RUNNER_TEMP\installed.json" -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\installed.json"
+          if ($p.ExitCode -ne 0) { throw "Installed smoke test failed with exit code $($p.ExitCode)" }
+          $p = Start-Process -FilePath (Join-Path $dir "unins000.exe") -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Uninstall failed with exit code $($p.ExitCode)" }
+          Start-Sleep -Seconds 3
+          if (Test-Path $exe) { throw "Executable still present after uninstall" }
+          if (-not (Test-Path "$env:RUNNER_TEMP\dlr-installed\received")) { throw "User data was removed by uninstall" }
+      - name: Upload Windows installer
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deckellink-rust-setup-windows
+          path: dist/installer/DeckelLink-Rust-*-Setup-x64.exe
+          if-no-files-found: error
+      - name: Upload Windows CLI
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deckellink-cli-windows
+          path: rust/target/release/deckellink-cli.exe
+          if-no-files-found: error
+      - name: Upload Windows application
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deckellink-windows
+          path: rust/target/release/deckellink.exe
+          if-no-files-found: error
+
+  parity:
+    name: Python/Rust parity (differential test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Python package
+        run: python -m pip install -e .
+      - name: Build Rust CLI
+        working-directory: rust
+        run: cargo build --release --locked
+      - name: Compare 3000 random cases
+        run: python tools/rust_parity.py --cases 3000 --seed 11

@@ -50,16 +50,52 @@ def count_line_endings(lines: list[RawLine]) -> dict[str, int]:
     return counts
 
 
-def program_end_pattern(token: str) -> re.Pattern[bytes] | None:
-    """Regex that finds ``token`` (e.g. ``M30``) as a stand-alone NC word.
+EOT = 0x04
+_EOT_TRAILER_RE = re.compile(rb"\x04[\r\n\x00]*\Z")
+_WORD_RE = re.compile(r"([A-Za-z])0*(\d+)")
 
-    ``M30`` matches in ``N100 M30`` and ``N100M30`` but not in ``M300`` or ``XM30``.
+
+def split_eot_trailer(data: bytes) -> tuple[bytes, bytes]:
+    """Split a trailing EOT (0x04, optionally followed by CR/LF/NUL) from ``data``.
+
+    The DIALOG 11 ends its V.24 output with EOT + CRLF (observed in real machine data
+    files). Only an EOT at the very end is treated as transmission end.
     """
-    cleaned = token.strip()
-    if not cleaned:
+    match = _EOT_TRAILER_RE.search(data)
+    if match is None:
+        return data, b""
+    return data[: match.start()], data[match.start() :]
+
+
+def program_end_alternatives(token: str) -> list[str]:
+    """``"M30,M2"`` -> ``["M30", "M2"]`` (comma or semicolon separated)."""
+    return [part.strip() for part in re.split(r"[,;]", token) if part.strip()]
+
+
+def primary_program_end(token: str) -> str:
+    """The first alternative - used when a program end has to be appended."""
+    alternatives = program_end_alternatives(token)
+    return alternatives[0] if alternatives else ""
+
+
+def _word_regex(word: str) -> bytes:
+    match = _WORD_RE.fullmatch(word)
+    if match:  # NC word: leading zeros allowed, so M2 also matches M02
+        return re.escape(match.group(1).encode("ascii")) + rb"0*" + match.group(2).encode("ascii")
+    return re.escape(word.encode("ascii", errors="replace"))
+
+
+def program_end_pattern(token: str) -> re.Pattern[bytes] | None:
+    """Regex that finds the program end word(s) as stand-alone NC words.
+
+    ``"M30,M2"`` matches ``N100 M30``, ``N100M30``, ``M02`` but not ``M300``,
+    ``M20`` or ``XM30``.
+    """
+    alternatives = program_end_alternatives(token)
+    if not alternatives:
         return None
-    escaped = re.escape(cleaned.encode("ascii", errors="replace"))
-    return re.compile(rb"(?<![A-Za-z.])" + escaped + rb"(?![0-9])", re.IGNORECASE)
+    body = b"|".join(_word_regex(word) for word in alternatives)
+    return re.compile(rb"(?<![A-Za-z.])(?:" + body + rb")(?![0-9])", re.IGNORECASE)
 
 
 def remove_comments(content: bytes, open_char: str, close_char: str) -> bytes:

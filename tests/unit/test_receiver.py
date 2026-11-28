@@ -8,6 +8,7 @@ from deckellink.clock import FakeClock
 from deckellink.domain.models import EndDetection, LineEnding, Profile
 from deckellink.domain.results import ReceiveProgress, TrafficEvent
 from deckellink.domain.states import EndReason, ReceiveState
+from deckellink.parameters.service import parameter_profile
 from deckellink.simulation.scenarios import SAMPLE_PROGRAM
 from deckellink.transfer.cancellation import CancellationToken
 from deckellink.transfer.receiver import (
@@ -45,7 +46,8 @@ def test_receive_until_m30(profile_a: Profile, clock: FakeClock) -> None:
     assert result.end_reason is EndReason.END_SEQUENCE
     assert result.raw.startswith(SAMPLE_PROGRAM)
     assert result.raw.endswith(b"M30\r\n")
-    assert b"".join(e.data for e in traffic) == result.raw
+    wire = b"".join(e.data for e in traffic)
+    assert wire.startswith(result.raw) and len(wire) - len(result.raw) <= 16  # peeked data is logged, not kept
     assert states[:3] == [ReceiveState.OPENING_PORT, ReceiveState.LISTENING, ReceiveState.RECEIVING]
     assert states[-1] is ReceiveState.COMPLETED
     assert result.first_byte_at is not None and result.last_byte_at is not None
@@ -208,3 +210,27 @@ def test_end_sequence_detector_rejects_m300() -> None:
     assert not detector.feed(b"N10 M300\r\n")
     assert detector.feed(b"N10 M300\r\nN20 M30\r\n")
     assert not EndSequenceDetector("").enabled
+
+
+def test_receive_m30_followed_by_eot(profile_a: Profile, clock: FakeClock) -> None:
+    receiver, _ = receive(profile_a, SimulationConfig(machine_program=SAMPLE_PROGRAM + b"\x04\r\n"), clock)
+    result = receiver.receive()
+    assert result.state is ReceiveState.COMPLETED and result.end_reason is EndReason.EOT
+    assert result.raw == SAMPLE_PROGRAM + b"\x04\r\n"
+
+
+def test_receive_ends_on_eot_without_program_end(profile_a: Profile, clock: FakeClock) -> None:
+    data = b"%MPG00 (KOPF)\r\nM65000 X\r\n?\r\n1234\r\n\x04\r\n"
+    receiver, _ = receive(profile_a, SimulationConfig(machine_program=data), clock)
+    result = receiver.receive()
+    assert result.end_reason is EndReason.EOT and result.raw == data
+    assert not process_received(result, profile_a).complete  # NC profile still requires M30/M2
+    assert process_received(result, parameter_profile(profile_a)).complete
+
+
+def test_receive_eot_disabled_waits_for_inactivity(profile_a: Profile, clock: FakeClock) -> None:
+    profile = replace(profile_a, receive=replace(profile_a.receive, end_on_eot=False))
+    data = b"N10 G00\r\n\x04\r\n"
+    receiver, _ = receive(profile, SimulationConfig(machine_program=data), clock)
+    result = receiver.receive()
+    assert result.end_reason is not EndReason.EOT and result.raw == data
