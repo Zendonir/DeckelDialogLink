@@ -8,11 +8,14 @@
 pub mod app;
 pub mod app_extra;
 pub mod applog;
+pub mod lib_app;
 pub mod logic;
 pub mod sim_app;
+pub mod smoke;
 pub mod theme;
 pub mod ui;
 pub mod ui_extra;
+pub mod ui_lib;
 pub mod ui_sim;
 pub mod worker;
 

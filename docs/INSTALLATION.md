@@ -11,6 +11,18 @@ Hinweis: Der Installer ist nicht code-signiert. Windows SmartScreen kann deshalb
 
 Stille Installation (z. B. Softwareverteilung): `DeckelLink-<version>-Setup-x64.exe /VERYSILENT /CURRENTUSER`.
 
+## Rust-Version (Vorschau)
+
+Die Rust-Version ist ein Neubau mit demselben Funktionsumfang und denselben Sicherheitsregeln. Sie nutzt dieselben Daten wie die Python-Version (`%LOCALAPPDATA%\DeckelLink`: Einstellungen, Profile, Empfangsarchiv, Programmverwaltung, Werkzeugtabelle).
+
+1. Aus den GitHub-Actions-Artefakten des Workflows „Rust“ `DeckelLink-Rust-<version>-Setup-x64.exe` herunterladen (Artefakt `deckellink-rust-setup-windows`).
+2. Setup starten, ebenfalls **ohne Administratorrechte**. Installiert wird nach `%LOCALAPPDATA%\Programs\DeckelLink-Rust`, also **neben** einer vorhandenen Python-Version. Beide Programme bitte nicht gleichzeitig mit derselben Schnittstelle betreiben.
+3. Startmenü: „DeckelLink (Rust)“, „DeckelLink (Rust) (Simulationsmodus)“ und das Handbuch. Optional „Öffnen mit“ für `.nc`-Dateien.
+4. Selbsttest ohne Fenster: `deckellink.exe --smoke-test --smoke-report %TEMP%\dlr.json` (Exit-Code 0 = OK; läuft immer im Simulationsmodus, öffnet keinen Port).
+5. Deinstallieren über Windows-Einstellungen → Apps. Die gemeinsamen Daten bleiben erhalten.
+
+Startparameter wie bei der Python-Version: `--data-dir <Ordner>`, `--simulate`, `--smoke-test`, `--smoke-report <Datei>`, `--version` und optional eine NC-Datei (wird nur geladen und geprüft, nicht gesendet).
+
 ## Portable Windows-Anwendung (Anwender)
 
 1. ZIP `DeckelLink-<version>-windows-x64.zip` aus den GitHub-Actions-Artefakten bzw. dem Release herunterladen.

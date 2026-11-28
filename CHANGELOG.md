@@ -2,6 +2,23 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.9] – 2026-11-28
+
+### Neu (Rust, Etappe 6)
+- **Programmverwaltung** (Seitentaste 9) im gleichen Ordnerformat wie die Python-Version:
+  - Importieren, neue Version aus Datei, frühere Versionen wiederherstellen (immer als neue Version), Papierkorb statt Löschen.
+  - Angaben, Vorschau und Werkzeugprüfung.
+  - Senden und Nachladebetrieb laden nur auf die Seite Übertragen; die Bestätigung bleibt Pflicht. Bei Werkzeugdateien zeigt die Bestätigung einen Warnhinweis.
+  - Nach einer abgeschlossenen Übertragung wird „Zuletzt gesendet“ eingetragen.
+  - Im Simulator ansehen oder bearbeiten; Speichern legt eine neue Version an.
+- **Werkzeugtabelle** (`tools.json`, Sicherung vor jedem Speichern). Sie versorgt den Simulator und die Werkzeugprüfung. Eine Werkzeugdatei entsteht nur aus einer selbst eingerichteten Vorlage, gekennzeichnet als nicht verifiziert.
+- **Windows-Installer** für die Rust-Version (`installer/deckellink-rust.iss`):
+  - Eigener Programmordner neben der Python-Version, gemeinsame Nutzerdaten, keine Administratorrechte nötig.
+  - Die CI baut den Installer, installiert still, führt den Selbsttest aus und prüft, dass die Deinstallation die Nutzerdaten nicht anfasst.
+- **Startparameter** wie bei der Python-Version: `--data-dir`, `--simulate`, `--smoke-test`, `--smoke-report`, `--version` und eine NC-Datei, die nur geladen wird.
+- **Selbsttest** `--smoke-test` ohne Fenster: Profile, Prüfung, simuliertes Senden und Empfangen, Original unverändert, Simulator, Programmverwaltung, alle Seiten.
+- **Gleichwertigkeitstest** erweitert um Werkzeugaufrufe, Dateiart, Metadatenformat, Werkzeugprüfung und Werkzeugdatei-Vorlage (0 Abweichungen).
+
 ## [Rust 0.8.0-alpha.8] – 2026-11-28
 
 ### Neu (Rust)

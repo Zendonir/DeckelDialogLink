@@ -151,6 +151,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         "param-json" => params::param_json(rest),
         "diag-json" => diag_json(rest),
         "sim-json" => sim_json(rest),
+        "lib-json" => lib_json(rest),
         "analyze-json" => {
             let [profile_file, file] = rest else {
                 return Err(USAGE.into());
@@ -278,6 +279,82 @@ fn sim_json(args: &[String]) -> Result<ExitCode, String> {
     });
     println!("{out}");
     Ok(ExitCode::SUCCESS)
+}
+
+/// Hidden: `lib-json <case-file>` - library and tool table helpers (parity test).
+fn lib_json(args: &[String]) -> Result<ExitCode, String> {
+    use deckellink_core::library::{guess_kind, tools_used, EntryKind, LibraryEntry};
+    use deckellink_core::tooldb::{export_tool_file, Tool, ToolExportTemplate};
+    let [file] = args else { return Err(USAGE.into()) };
+    let text = std::fs::read_to_string(file).map_err(|e| e.to_string())?;
+    let case: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let str_of =
+        |v: &serde_json::Value, key: &str| v.get(key).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+    let f64_of = |v: &serde_json::Value, key: &str| v.get(key).and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+    let i64_of = |v: &serde_json::Value, key: &str| v.get(key).and_then(serde_json::Value::as_i64).unwrap_or(0);
+    let program = unhex(&str_of(&case, "program"));
+    let name = str_of(&case, "name");
+    let tools: Vec<Tool> = case
+        .get("tools")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|t| Tool {
+            number: i64_of(t, "number"),
+            name: str_of(t, "name"),
+            kind: str_of(t, "kind"),
+            diameter: f64_of(t, "diameter"),
+            length: f64_of(t, "length"),
+            flutes: i64_of(t, "flutes"),
+            feed: f64_of(t, "feed"),
+            speed: f64_of(t, "speed"),
+            note: str_of(t, "note"),
+        })
+        .collect();
+    let template = ToolExportTemplate {
+        header: str_of(&case, "header"),
+        line: str_of(&case, "line"),
+        footer: str_of(&case, "footer"),
+    };
+    let used = tools_used(&program);
+    let export = match export_tool_file(&tools, &template) {
+        Ok(data) => json!({"ok": hex(&data)}),
+        Err(err) => json!({"error": err.0}),
+    };
+    let entry = LibraryEntry {
+        id: "X".into(),
+        path: PathBuf::from("X.nc"),
+        name: name.clone(),
+        kind: guess_kind(&program, &name),
+        number: str_of(&case, "number"),
+        description: str_of(&case, "description"),
+        source: name.clone(),
+        created_at: "2026-11-28T10:00:00+01:00".into(),
+        updated_at: "2026-11-28T10:00:00+01:00".into(),
+        sha256: deckellink_core::storage::sha256_hex(&program),
+        size: u64::try_from(program.len()).unwrap_or(0),
+        tools: used.clone(),
+        last_sent_at: String::new(),
+        last_sent_mode: String::new(),
+        version_count: 0,
+    };
+    let meta = serde_json::to_string_pretty(&entry.to_meta()).map_err(|e| e.to_string())?;
+    let problems: Vec<String> = tools.iter().flat_map(Tool::problems).collect();
+    let missing = deckellink_core::tooldb::check_program_tools(&used, &tools);
+    let kind: EntryKind = entry.kind;
+    println!(
+        "{}",
+        json!({"tools_used": used, "kind": kind.value(), "missing": missing, "problems": problems,
+               "export": export, "meta": meta,
+               "stem": deckellink_core::library::library_stem(&name, "PROGRAMM")})
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn unhex(text: &str) -> Vec<u8> {
+    (0..text.len() / 2)
+        .filter_map(|i| text.get(2 * i..2 * i + 2).and_then(|b| u8::from_str_radix(b, 16).ok()))
+        .collect()
 }
 
 fn finding_value(f: &deckellink_core::nc::Finding) -> serde_json::Value {
@@ -600,13 +677,6 @@ fn json_list(config: &serde_json::Value, key: &str) -> Vec<usize> {
 
 fn json_opt(config: &serde_json::Value, key: &str) -> Option<usize> {
     config.get(key).and_then(serde_json::Value::as_u64).and_then(|v| usize::try_from(v).ok())
-}
-
-fn unhex(text: &str) -> Vec<u8> {
-    (0..text.len() / 2)
-        .filter_map(|i| text.get(2 * i..2 * i + 2))
-        .filter_map(|h| u8::from_str_radix(h, 16).ok())
-        .collect()
 }
 
 /// Wire-level trace against the simulated LSV2 CNC with virtual time (parity tests with Python).

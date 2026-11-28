@@ -8,6 +8,7 @@ use egui::{Color32, RichText, ScrollArea, Ui, Vec2};
 
 use deckellink_core::appdata::ConnectionKind;
 use deckellink_core::error::UserFacingError;
+use deckellink_core::library::EntryKind;
 use deckellink_core::model::VerificationStatus;
 use deckellink_core::nc::{Finding, Severity};
 use deckellink_core::parameters::{ParameterDiff, PARAMETER_WRITE_NOTICE, WRITE_CONFIRMATION_PHRASE};
@@ -37,7 +38,7 @@ sicher angehalten. Halten Sie die Maschine bei Störungen an der Steuerung an. D
 Nachladebetriebs nicht in den Energiesparmodus wechseln.";
 
 /// Pages reachable via the numbered keys (order of the Python version).
-pub const NAV_PAGES: [Page; 8] = [
+pub const NAV_PAGES: [Page; 9] = [
     Page::Transfer,
     Page::Receive,
     Page::Programs,
@@ -46,6 +47,7 @@ pub const NAV_PAGES: [Page; 8] = [
     Page::Diagnostics,
     Page::Settings,
     Page::Log,
+    Page::Library,
 ];
 
 pub fn status_color(kind: StatusKind) -> Color32 {
@@ -219,6 +221,7 @@ pub fn softkeys(app: &DeckelApp) -> [Option<Softkey>; 8] {
                 None,
             ]
         }
+        Page::Library => library_softkeys(app),
         Page::Simulator => {
             let mut keys: [Option<Softkey>; 8] = Default::default();
             if let Some(menu) = app.sim.menu() {
@@ -253,6 +256,43 @@ pub fn softkeys(app: &DeckelApp) -> [Option<Softkey>; 8] {
                 None,
             ]
         }
+    }
+}
+
+fn library_softkeys(app: &DeckelApp) -> [Option<Softkey>; 8] {
+    use crate::lib_app::{LibAction, LibTab};
+    let idle = !app.busy();
+    match app.lib.tab() {
+        LibTab::Programs => {
+            let entry = app.lib.selected_entry();
+            let has = entry.is_some();
+            let editable = entry.is_some_and(|e| matches!(e.kind, EntryKind::Program | EntryKind::Macro));
+            let drip = entry.is_some_and(|e| e.kind == EntryKind::Program) && app.profile.protocol.is_lsv2();
+            [
+                key("IMPOR-\nTIEREN", Action::Lib(LibAction::Import), true),
+                key("NEUE\nVERSION", Action::Lib(LibAction::NewVersion), has),
+                key("SIMULATOR\nANSEHEN", Action::Lib(LibAction::Simulate { edit: false }), has),
+                key("SIMULATOR\nBEARBEITEN", Action::Lib(LibAction::Simulate { edit: true }), editable),
+                key("ZUM SENDEN\nLADEN", Action::Lib(LibAction::Send { drip_feed: false }), has && idle),
+                if app.profile.protocol.is_lsv2() {
+                    key("NACHLADE-\nBETRIEB", Action::Lib(LibAction::Send { drip_feed: true }), drip && idle)
+                } else {
+                    None
+                },
+                key("PAPIER-\nKORB", Action::Lib(LibAction::RequestDelete), has),
+                key("WERK-\nZEUGE", Action::Lib(LibAction::Tab(LibTab::Tools)), true),
+            ]
+        }
+        LibTab::Tools => [
+            key("WERKZEUG\nHINZUFÜGEN", Action::Lib(LibAction::ToolAdd), true),
+            key("SPEICHERN", Action::Lib(LibAction::ToolSave), true),
+            key("VERWERFEN", Action::Lib(LibAction::ToolReload), true),
+            key("VORLAGE\nSPEICHERN", Action::Lib(LibAction::TemplateSave), true),
+            key("WZ-DATEI\nERZEUGEN", Action::Lib(LibAction::ToolExport), app.lib.template.configured()),
+            None,
+            None,
+            key("PRO-\nGRAMME", Action::Lib(LibAction::Tab(LibTab::Programs)), true),
+        ],
     }
 }
 
@@ -327,6 +367,7 @@ fn keyboard(app: &mut DeckelApp, ctx: &egui::Context) {
         egui::Key::Num6,
         egui::Key::Num7,
         egui::Key::Num8,
+        egui::Key::Num9,
     ];
     for (page, digit) in NAV_PAGES.iter().zip(digits) {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, digit)) {
@@ -428,6 +469,7 @@ fn menu_bar(app: &mut DeckelApp, ui: &mut Ui) {
                 ("Datenformat ermitteln (nur Mitlesen) …", Page::Diagnostics),
                 ("Diagnosepaket exportieren …", Page::Diagnostics),
                 ("Inbetriebnahme-Assistent …", Page::Commissioning),
+                ("Programm- und Werkzeugverwaltung", Page::Library),
                 ("DIALOG-11-Simulator (Grafik, offline) …", Page::Simulator),
             ] {
                 if ui.button(text).clicked() {
@@ -602,6 +644,7 @@ fn screen(app: &mut DeckelApp, ui: &mut Ui) {
                     Page::Commissioning => crate::ui_extra::commissioning_page(app, ui),
                     Page::Help => crate::ui_extra::help_page(app, ui),
                     Page::Simulator => {}
+                    Page::Library => crate::ui_lib::page(app, ui),
                 }
             });
         });
@@ -1235,6 +1278,7 @@ fn dialogs(app: &mut DeckelApp, ctx: &egui::Context) {
             Dialog::RealMode => real_mode(app, ui),
             Dialog::DeleteProfile => crate::ui_extra::delete_profile_dialog(app, ui),
             Dialog::MarkVerified => crate::ui_extra::mark_verified_dialog(app, ui),
+            Dialog::DeleteLibraryEntry => crate::ui_lib::delete_dialog(app, ui),
         }
     });
     if modal.should_close() {
@@ -1308,6 +1352,14 @@ fn confirm_send(app: &mut DeckelApp, ui: &mut Ui, drip_feed: bool, mut drip_ack:
     }
     if payload.appended_program_end {
         message(ui, Tone::Warn, "Programmende wird auf Ihre Bestätigung hin ergänzt.", |_| {});
+    }
+    let notes = app.library_send_notes(&program.path);
+    if !notes.is_empty() {
+        message(ui, Tone::Error, "Werkzeugdatei", |ui| {
+            for note in &notes {
+                ui.label(note.as_str());
+            }
+        });
     }
     let warnings: Vec<String> = program.analysis.warnings().map(|w| w.message.clone()).collect();
     if !warnings.is_empty() {

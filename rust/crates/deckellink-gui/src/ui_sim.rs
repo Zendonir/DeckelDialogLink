@@ -126,6 +126,14 @@ fn listing(app: &mut DeckelApp, ui: &mut Ui) {
             if ui.add(screen_key("Demo")).clicked() {
                 sim(app, SimAction::LoadDemo);
             }
+            if app.sim.library_entry.is_some()
+                && ui
+                    .add(screen_key("In Programmverwaltung speichern"))
+                    .on_hover_text("Als neue Version speichern; die vorherige Version bleibt erhalten")
+                    .clicked()
+            {
+                sim(app, SimAction::SaveToLibrary);
+            }
         });
         ui.add_space(4.0);
         if app.sim.mode == 3 {

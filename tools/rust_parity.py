@@ -11,6 +11,7 @@ results field by field. Exit code 1 on any difference.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import random
@@ -716,6 +717,120 @@ def simulator_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random) -
     return failures
 
 
+LIB_PIECES = [
+    "N10 T1 M6",
+    "TT 12",
+    "T007",
+    "T0",
+    "T1.5",
+    "XT3",
+    "TTT5",
+    "(T99 KOMMENTAR)",
+    "%%4",
+    "%MPG01",
+    "%MDG02",
+    " %%7",
+    "T\t4",
+    "t5",
+    "ä T6",
+    "G1 X10",
+    "T12345678901234567890",
+    "TT2.",
+    "M30",
+]
+
+
+def python_lib(case: dict[str, Any]) -> dict[str, Any]:
+    from deckellink.storage.files import sanitize_stem
+    from deckellink.storage.library import LibraryEntry, guess_kind, tools_used
+    from deckellink.storage.tooldb import (
+        Tool,
+        ToolDataError,
+        ToolExportTemplate,
+        check_program_tools,
+        export_tool_file,
+    )
+
+    program = bytes.fromhex(case["program"])
+    tools = [Tool(**t) for t in case["tools"]]
+    template = ToolExportTemplate(case["header"], case["line"], case["footer"])
+    used = tools_used(program)
+    try:
+        export: dict[str, str] = {"ok": export_tool_file(tools, template).hex()}
+    except ToolDataError as exc:
+        export = {"error": str(exc)}
+    entry = LibraryEntry(
+        id="X",
+        path=Path("X.nc"),
+        name=case["name"],
+        kind=guess_kind(program, case["name"]),
+        number=case["number"],
+        description=case["description"],
+        source=case["name"],
+        created_at="2026-11-28T10:00:00+01:00",
+        updated_at="2026-11-28T10:00:00+01:00",
+        sha256=hashlib.sha256(program).hexdigest(),
+        size=len(program),
+        tools=used,
+    )
+    return {
+        "tools_used": used,
+        "kind": entry.kind.value,
+        "missing": check_program_tools(used, tools),
+        "problems": [p for t in tools for p in t.problems()],
+        "export": export,
+        "meta": json.dumps(entry.to_meta(), ensure_ascii=False, indent=2),
+        "stem": sanitize_stem(case["name"], "PROGRAMM"),
+    }
+
+
+def library_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random) -> int:
+    """Program management (tool calls, file kind, metadata) and tool table (checks, export template)."""
+    failures = 0
+    for case_no in range(cases):
+        text = "\r\n".join(rng.choice(LIB_PIECES) for _ in range(rng.randint(0, 12)))
+        program = text.encode("utf-8")
+        tools = []
+        for _ in range(rng.randint(0, 5)):
+            tools.append(
+                {
+                    "number": rng.choice([1, 2, 3, 5, 12, 0, -1, 10000, 2]),
+                    "name": rng.choice(["", "VHM 8", "Bohrer", "Fräser Ø10"]),
+                    "kind": rng.choice(["Fräser", "Bohrer", "Gewinde"]),
+                    "diameter": rng.choice([10.0, 8.0, 2.5005, 0.0, -1.0, 1500.0, 12.125, 1e-5]),
+                    "length": rng.choice([0.0, 55.5, 2500.0, -3000.0, 1e16]),
+                    "flutes": rng.choice([0, 2, 4, -1]),
+                    "feed": rng.choice([0.0, 120.0, -5.0, 33.3333]),
+                    "speed": rng.choice([0.0, 3000.0, 1234.5678]),
+                    "note": rng.choice(["", "neu"]),
+                }
+            )
+        case = {
+            "program": program.hex(),
+            "name": rng.choice(["TEIL 1.nc", "%%4", "Prog ä.1", "", "a" * 80, "__x__", "WERKZEUGE"]),
+            "number": rng.choice(["", "17"]),
+            "description": rng.choice(["", "Ölwanne ✓"]),
+            "tools": tools,
+            "header": rng.choice(["", "%T\n", "KOPF\r\nZWEI\r\n", "  \n"]),
+            "line": rng.choice(["", "T{T} R{R} D{D} L{L} Z{Z} F{F} S{S} {TYP} {NAME}", "{T};{R}", "  "]),
+            "footer": rng.choice(["", "M30", "ENDE\n\nX"]),
+        }
+        path = tmp_dir / "lib.json"
+        path.write_text(json.dumps(case), encoding="utf-8")
+        completed = subprocess.run([str(cli), "lib-json", str(path)], capture_output=True, check=False)
+        rust = json.loads(completed.stdout) if completed.returncode == 0 else {"error": completed.stderr.decode()}
+        python = python_lib(case)
+        if rust != python:
+            failures += 1
+            if failures <= 5:
+                print(f"--- library case {case_no} differs: {case}")
+                for key, value in python.items():
+                    if value != rust.get(key):
+                        print(f"  {key}:\n    python={value!r}\n    rust  ={rust.get(key)!r}")
+    print(f"{cases} library cases, {failures} differences")
+    return failures
+
+
 def lsv2_parity(cli: Path, tmp_dir: Path) -> int:
     lsv2_json = json.loads((builtin_profiles_dir() / "dialog11_lsv2_7e1.json").read_text(encoding="utf-8"))
     failures = 0
@@ -789,6 +904,7 @@ def main() -> int:
         failures += parameter_parity(args.cli, tmp_dir, max(args.cases // 2, 50), rng)
         failures += diagnostics_parity(args.cli, tmp_dir, max(args.cases // 4, 50), rng)
         failures += simulator_parity(args.cli, tmp_dir, max(args.cases // 2, 50), rng)
+        failures += library_parity(args.cli, tmp_dir, max(args.cases // 4, 50), rng)
     return 1 if failures else 0
 
 

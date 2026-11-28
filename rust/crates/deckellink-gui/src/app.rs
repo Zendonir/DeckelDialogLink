@@ -47,10 +47,11 @@ pub enum Page {
     Commissioning,
     Help,
     Simulator,
+    Library,
 }
 
 impl Page {
-    pub const ALL: [Page; 11] = [
+    pub const ALL: [Page; 12] = [
         Page::Transfer,
         Page::Receive,
         Page::Programs,
@@ -62,6 +63,7 @@ impl Page {
         Page::Commissioning,
         Page::Help,
         Page::Simulator,
+        Page::Library,
     ];
 
     pub fn label(self) -> &'static str {
@@ -77,6 +79,7 @@ impl Page {
             Page::Commissioning => "Inbetriebnahme",
             Page::Help => "Hilfe",
             Page::Simulator => "DIALOG-11-Simulator",
+            Page::Library => "Programmverwaltung",
         }
     }
 }
@@ -155,6 +158,8 @@ pub enum Action {
     Sim(crate::sim_app::SimAction),
     /// Open the loaded program in the simulator (display only, no transfer).
     SimulateProgram,
+    /// Operation on the program management page.
+    Lib(crate::lib_app::LibAction),
 }
 
 /// Open modal dialog.
@@ -166,6 +171,7 @@ pub enum Dialog {
     RealMode,
     DeleteProfile,
     MarkVerified,
+    DeleteLibraryEntry,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -230,6 +236,9 @@ pub struct DeckelApp {
     pub log_filter: Level,
     pub extra: crate::app_extra::ExtraState,
     pub sim: crate::sim_app::SimPage,
+    pub library: deckellink_core::library::ProgramLibrary,
+    pub tool_db: deckellink_core::tooldb::ToolDatabase,
+    pub lib: crate::lib_app::LibState,
 }
 
 impl std::fmt::Debug for DeckelApp {
@@ -267,6 +276,11 @@ impl DeckelApp {
         for warning in config_warnings.iter().chain(store.problems.iter()) {
             log.warn(warning.clone());
         }
+        let library = deckellink_core::library::ProgramLibrary::new(&paths.root.join("library"));
+        let tool_db = deckellink_core::tooldb::ToolDatabase::new(
+            &paths.root.join(deckellink_core::tooldb::TOOL_FILE),
+            Some(&paths.backups),
+        );
         let mut app = Self {
             ctx,
             archive: Vec::new(),
@@ -299,9 +313,14 @@ impl DeckelApp {
             log_filter: Level::Info,
             extra: crate::app_extra::ExtraState::default(),
             sim: crate::sim_app::SimPage::default(),
+            library,
+            tool_db,
+            lib: crate::lib_app::LibState::default(),
             config,
         };
         app.refresh_archive();
+        app.refresh_library(None);
+        app.load_tools();
         app.refresh_parameter_sets();
         crate::theme::install(&app.ctx);
         app.apply_zoom();
@@ -397,7 +416,11 @@ impl DeckelApp {
                     self.ports = available_ports();
                 }
                 if page == Page::Simulator && self.sim.playback.is_none() && !self.sim.busy {
+                    self.sim_tools_from_db();
                     self.sim.resimulate();
+                }
+                if page == Page::Library {
+                    self.refresh_library(None);
                 }
                 self.page = page;
             }
@@ -557,6 +580,7 @@ impl DeckelApp {
             }
             Action::Sim(action) => self.handle_sim(action),
             Action::SimulateProgram => self.simulate_loaded_program(),
+            Action::Lib(action) => self.handle_lib(action),
             other => self.handle_extra(other),
         }
     }
@@ -809,6 +833,9 @@ impl DeckelApp {
         match result.state {
             SendState::Completed => {
                 self.set_status(StatusKind::Ready, format!("Übertragung abgeschlossen ({} Bytes)", result.bytes_sent));
+                if let Some(path) = self.program.as_ref().map(|p| p.path.clone()) {
+                    self.mark_library_sent(&path, result.simulated);
+                }
                 self.log.info(format!(
                     "Übertragung abgeschlossen: {} Bytes in {:.1} s, SHA-256 {}",
                     result.bytes_sent,

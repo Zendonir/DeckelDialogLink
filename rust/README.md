@@ -30,6 +30,8 @@ rust/
     storage.rs              SHA-256, exklusives Anlegen, atomares Schreiben (nie still überschreiben)
     appdata.rs              Datenordner, settings.json und Empfangsarchiv (kompatibel zur Python-Version)
     scenarios.rs            Simulationsszenarien (gleiche IDs und Texte wie Python)
+    library.rs              Programmverwaltung (Versionen, Papierkorb; gleiches Ordnerformat wie Python)
+    tooldb.rs               Werkzeugtabelle tools.json, Prüfung, Werkzeugdatei aus Vorlage (nicht verifiziert)
     sim/                    DIALOG-11-Simulator: Syntax, Rechenausdrücke, Geometrie, Interpreter,
                             Zyklen G81-G89, Wiedergabe, Menübaum, Befehlsübersicht
   crates/deckellink-cli/    Kommandozeile
@@ -89,7 +91,15 @@ Außerdem enthält die Oberfläche:
   - Testlauf mit Zyklus-Start/-Stopp, Einzelsatz, Tempo und Zeitleiste; Handfahren und FAHREN nur im Simulator; Editieren mit DIA-Eingabe, Suchen, Ersetzen, Kopieren, Schieben.
   - Rein offline: kein Port, keine Übertragung. Die Originaldatei wird nie verändert; „Als neue Datei“ legt nur neue Dateien an.
 
-Noch nicht in Rust: Programm- und Werkzeugverwaltung (Etappe 6) sowie der Windows-Installer.
+- **Programmverwaltung** (Seitentaste 9):
+  - Programme, Makros und Werkzeugdateien importieren; jede Änderung legt eine neue Version an, Löschen verschiebt in den Papierkorb (`library/deleted`).
+  - Angaben (Name, Art, Nummer, Beschreibung), Vorschau, Werkzeugprüfung gegen die Werkzeugtabelle, frühere Versionen wiederherstellen.
+  - „Zum Senden laden“ und „Nachladebetrieb“ laden nur auf die Seite Übertragen; gesendet wird erst nach der Bestätigung. Werkzeugdateien bekommen dort einen deutlichen Warnhinweis.
+  - „Im Simulator ansehen/bearbeiten“; bearbeitete Programme werden als neue Version gespeichert.
+- **Werkzeugtabelle** (`tools.json`, Sicherung vor jedem Speichern) für Simulator und Werkzeugprüfung; Werkzeugdatei nur aus einer selbst eingerichteten Vorlage (Format der DIALOG 11 nicht verifiziert).
+- **Windows-Installer** `installer/deckellink-rust.iss` (siehe `docs/INSTALLATION.md`), Selbsttest `deckellink --smoke-test`.
+
+Noch nicht in Rust: „Übertragung mitverfolgen“ im Simulator.
 
 Tests:
 - `tests/flows.rs` prüft die Abläufe ohne Fenster: Jedes Bild wird mit egui gezeichnet, die Aktionen sind dieselben wie bei den Schaltflächen.
@@ -150,6 +160,6 @@ cargo build --release      # target/release/deckellink(.exe) und deckellink-cli(
 | 3 | Maschinenparameter (Dateistruktur, Vergleich, Archiv, Schreibsperren, Kontrolle); Gleichwertigkeit für Zufalls-Parameterdateien inkl. Diff-Texten | **fertig** |
 | 4 | Oberfläche (egui) mit allen Seiten, Profileditor, Diagnose (Loopback, Formaterkennung, Diagnosepaket), Aufzeichnung abspielen, Inbetriebnahme-Assistent, Hilfe | **fertig** |
 | 5 | DIALOG-11-Simulator mit Grafik und Steuerungsmenüs; Gleichwertigkeit für das Demoprogramm und Zufallsprogramme (Bahnen, Meldungen, Zustände, Parameter) | **fertig** |
-| 6 | Programm- und Werkzeugverwaltung, Inbetriebnahme-Assistent, Windows-Installer | offen |
+| 6 | Programm- und Werkzeugverwaltung, Windows-Installer mit Selbsttest; Gleichwertigkeit für Werkzeugaufrufe, Dateiart, Metadaten und Werkzeugdatei-Vorlage | **fertig** |
 
-Die Rust-Oberfläche deckt alles außer der Programm- und Werkzeugverwaltung ab. Bis Etappe 6 fertig ist, bleibt die Python-Version die vollständige Anwendung.
+Mit Etappe 6 hat die Rust-Version den Funktionsumfang der Python-Version (bis auf „Übertragung mitverfolgen“ im Simulator). Bis zur Prüfung an der FP2A und der Freigabe durch den Anwender bleibt die Python-Version die Referenz.

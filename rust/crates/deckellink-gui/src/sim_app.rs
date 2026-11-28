@@ -156,6 +156,7 @@ pub enum SimAction {
     Fit,
     LoadDemo,
     OpenFile,
+    SaveToLibrary,
     SaveAs,
     Resimulate,
     /// Clicked line of the listing (1-based).
@@ -222,6 +223,8 @@ pub struct SimPage {
     pub pending_cursor: Option<(usize, usize)>,
     pub clipboard: Vec<String>,
     pub busy: bool,
+    /// Library entry the text belongs to ("In Programmverwaltung speichern").
+    pub library_entry: Option<String>,
     clock: Box<dyn Clock>,
     last_tick: Option<f64>,
     dirty_since: Option<f64>,
@@ -313,6 +316,7 @@ impl SimPage {
             pending_cursor: None,
             clipboard: Vec::new(),
             busy: false,
+            library_entry: None,
             clock,
             last_tick: None,
             dirty_since: None,
@@ -455,6 +459,7 @@ impl SimPage {
     }
 
     pub fn load_text(&mut self, text: String, name: &str) {
+        self.library_entry = None;
         self.text = text;
         self.source_name = name.to_string();
         self.time = 0.0;
@@ -1122,6 +1127,10 @@ impl crate::app::DeckelApp {
                 None
             }
             SimAction::OpenFile => Some(SimRequest::OpenFile),
+            SimAction::SaveToLibrary => {
+                self.sim_save_to_library();
+                return;
+            }
             SimAction::SaveAs => Some(SimRequest::SaveAs),
             SimAction::Resimulate => {
                 sim.resimulate();

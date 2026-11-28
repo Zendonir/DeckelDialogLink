@@ -419,3 +419,65 @@ fn simulator_page_modes_softkeys_and_playback() {
     assert_eq!(h.app.send_state, SendState::Idle);
     assert!(!h.app.busy());
 }
+
+#[test]
+fn library_import_versions_send_tools_and_trash() {
+    use deckellink_gui::lib_app::{LibAction, LibTab};
+    let mut h = Harness::new("library");
+    let source = h.root.join("TEIL 7.nc");
+    std::fs::create_dir_all(&h.root).unwrap();
+    std::fs::write(&source, b"N10 T3 M6\r\nN20 G0 X10\r\nN30 M30\r\n").unwrap();
+    h.act(Action::Navigate(Page::Library));
+    let entry = h.app.library_import(&source).unwrap();
+    assert_eq!(entry.id, "TEIL_7");
+    assert_eq!(h.app.lib.selected.as_deref(), Some("TEIL_7"));
+    // metadata
+    h.app.lib.number = "17".into();
+    h.act(Action::Lib(LibAction::SaveMeta));
+    assert_eq!(h.app.library.get("TEIL_7").unwrap().number, "17");
+    // new version keeps the previous content
+    let newer = h.root.join("neu.nc");
+    std::fs::write(&newer, b"N10 T4 M6\r\nN30 M30\r\n").unwrap();
+    assert!(h.app.library_new_version(&entry, &newer));
+    assert_eq!(h.app.lib.versions.len(), 1);
+    assert_eq!(h.app.library.get("TEIL_7").unwrap().tools, ["T4"]);
+    // tools: T4 missing -> add, save; template export creates a tool file entry
+    h.act(Action::Lib(LibAction::Tab(LibTab::Tools)));
+    h.act(Action::Lib(LibAction::ToolAdd));
+    h.app.lib.tool_rows[0][0] = "4".into();
+    h.act(Action::Lib(LibAction::ToolSave));
+    assert!(h.app.lib.tool_status.as_ref().is_some_and(|s| s.0), "{:?}", h.app.lib.tool_status);
+    assert!(h.app.tool_db.path.is_file());
+    h.app.lib.template.line = "T{T} R{R}".into();
+    h.act(Action::Lib(LibAction::ToolExport));
+    assert!(h.app.lib.entries.iter().any(|e| e.kind == deckellink_core::library::EntryKind::Tools));
+    // the source file is never modified
+    assert_eq!(std::fs::read(&source).unwrap(), b"N10 T3 M6\r\nN20 G0 X10\r\nN30 M30\r\n");
+    // send: only loads on the transfer page, the transfer still needs the confirmation
+    h.act(Action::Lib(LibAction::Select("TEIL_7".into())));
+    h.act(Action::Lib(LibAction::Send { drip_feed: false }));
+    assert_eq!(h.app.page, Page::Transfer);
+    assert!(!h.app.busy());
+    h.act(Action::RequestSend { drip_feed: false });
+    h.act(Action::ConfirmSend { suppress_safety_notice: false });
+    h.wait_idle();
+    assert_eq!(h.app.library.get("TEIL_7").unwrap().last_sent_mode, "Simulator");
+    // simulator edit and save as new version
+    h.act(Action::Navigate(Page::Library));
+    h.act(Action::Lib(LibAction::Select("TEIL_7".into())));
+    h.act(Action::Lib(LibAction::Simulate { edit: true }));
+    assert_eq!(h.app.page, Page::Simulator);
+    assert_eq!(h.app.sim.mode, 3);
+    h.app.sim.text.push_str("N40 G0 Z50\n");
+    h.act(Action::Sim(deckellink_gui::sim_app::SimAction::SaveToLibrary));
+    assert_eq!(h.app.library.versions(&h.app.library.get("TEIL_7").unwrap()).len(), 2);
+    // trash needs the dialog
+    h.act(Action::Navigate(Page::Library));
+    h.act(Action::Lib(LibAction::Select("TEIL_7".into())));
+    h.act(Action::Lib(LibAction::RequestDelete));
+    assert!(matches!(h.app.dialog, Some(Dialog::DeleteLibraryEntry)));
+    assert!(h.app.library.get("TEIL_7").is_some());
+    h.act(Action::Lib(LibAction::ConfirmDelete));
+    assert!(h.app.library.get("TEIL_7").is_none());
+    assert!(h.app.library.deleted_dir.is_dir());
+}
