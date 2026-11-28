@@ -481,3 +481,27 @@ fn library_import_versions_send_tools_and_trash() {
     assert!(h.app.library.get("TEIL_7").is_none());
     assert!(h.app.library.deleted_dir.is_dir());
 }
+
+#[test]
+fn simulator_follows_a_running_transfer() {
+    let mut h = Harness::new("follow");
+    h.act(Action::LoadSample);
+    h.act(Action::SimulateProgram);
+    assert_eq!(h.app.page, Page::Simulator);
+    assert!(h.app.sim.follow_enabled && h.app.sim.follow_path.is_some());
+    let start = Instant::now();
+    while h.app.sim.playback.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(30));
+        std::thread::sleep(Duration::from_millis(10));
+        h.frame();
+    }
+    h.act(Action::RequestSend { drip_feed: false });
+    h.act(Action::ConfirmSend { suppress_safety_notice: false });
+    h.wait_idle();
+    assert_eq!(h.app.send_state, SendState::Completed);
+    let line = h.app.sim.follow_line.expect("transfer followed");
+    assert!(line >= 1);
+    assert!(h.app.sim.mode_flags().iter().any(|f| f.starts_with("ÜBERTRAGEN BIS ZEILE")));
+    // following never starts the test run
+    assert!(!h.app.sim.running);
+}

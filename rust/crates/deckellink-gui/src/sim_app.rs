@@ -225,6 +225,11 @@ pub struct SimPage {
     pub busy: bool,
     /// Library entry the text belongs to ("In Programmverwaltung speichern").
     pub library_entry: Option<String>,
+    /// File whose transfer can be followed ("Übertragung mitverfolgen", display only).
+    pub follow_path: Option<PathBuf>,
+    pub follow_enabled: bool,
+    /// Last original line already transmitted.
+    pub follow_line: Option<usize>,
     clock: Box<dyn Clock>,
     last_tick: Option<f64>,
     dirty_since: Option<f64>,
@@ -317,6 +322,9 @@ impl SimPage {
             clipboard: Vec::new(),
             busy: false,
             library_entry: None,
+            follow_path: None,
+            follow_enabled: false,
+            follow_line: None,
             clock,
             last_tick: None,
             dirty_since: None,
@@ -460,6 +468,9 @@ impl SimPage {
 
     pub fn load_text(&mut self, text: String, name: &str) {
         self.library_entry = None;
+        self.follow_path = None;
+        self.follow_enabled = false;
+        self.follow_line = None;
         self.text = text;
         self.source_name = name.to_string();
         self.time = 0.0;
@@ -554,6 +565,9 @@ impl SimPage {
         }
         if self.dripfeed_on {
             flags.push("NACHLADEN".into());
+        }
+        if let Some(line) = self.follow_line {
+            flags.push(format!("ÜBERTRAGEN BIS ZEILE {line}"));
         }
         flags.push("SIMULATION".into());
         flags
@@ -1004,6 +1018,16 @@ impl SimPage {
         }
     }
 
+    /// Show the transmitted state of a running transfer (line already sent), NOT the
+    /// position of the machine.
+    pub fn follow_transfer(&mut self, line: usize) {
+        let Some(playback) = &self.playback else { return };
+        let time = playback.time_until_line(line);
+        self.pause();
+        self.follow_line = Some(line);
+        self.time = time;
+    }
+
     pub fn time_text(&self) -> String {
         format!("{} / {}", format_duration(self.time), format_duration(self.total()))
     }
@@ -1215,9 +1239,29 @@ impl crate::app::DeckelApp {
         let Some(program) = &self.program else { return };
         let name = program.path.file_name().map_or_else(|| "Programm".into(), |n| n.to_string_lossy().into_owned());
         let text = String::from_utf8_lossy(&program.original).replace('\u{4}', "");
+        let path = program.path.clone();
         self.sim.load_text(text, &name);
+        self.sim.follow_path = Some(path);
+        self.sim.follow_enabled = true;
         self.sim.set_mode(2);
         self.page = crate::app::Page::Simulator;
+    }
+}
+
+impl crate::app::DeckelApp {
+    /// Progress of a running transfer: move the simulator to the transmitted state when it
+    /// shows the same file and following is switched on (display only).
+    pub(crate) fn follow_in_simulator(&mut self, current_line: usize) {
+        if !self.sim.follow_enabled || self.send_line_map.is_empty() {
+            return;
+        }
+        if self.sim.follow_path.is_none() || self.sim.follow_path != self.sending_path {
+            return;
+        }
+        let index = current_line.max(1).min(self.send_line_map.len()) - 1;
+        if let Some(line) = self.send_line_map.get(index).copied() {
+            self.sim.follow_transfer(line);
+        }
     }
 }
 

@@ -758,7 +758,8 @@ fn machine_panel(app: &mut DeckelApp, ui: &mut Ui) {
         ui.add_space(8.0);
         let total = app.sim.total();
         let mut fraction = if total > 0.0 { app.sim.time / total } else { 0.0 };
-        let reserve = if app.sim.mode == 1 { 700.0 } else { 400.0 };
+        let reserve =
+            if app.sim.mode == 1 { 700.0 } else { 400.0 } + if app.sim.follow_path.is_some() { 200.0 } else { 0.0 };
         let slider_width = (ui.available_width() - reserve).max(50.0);
         ui.spacing_mut().slider_width = slider_width;
         if ui
@@ -768,6 +769,13 @@ fn machine_panel(app: &mut DeckelApp, ui: &mut Ui) {
             sim(app, SimAction::Seek(fraction));
         }
         ui.label(RichText::new(app.sim.time_text()).monospace().color(TEXT));
+        if app.sim.follow_path.is_some() {
+            ui.checkbox(&mut app.sim.follow_enabled, RichText::new("Übertragung mitverfolgen").color(TEXT))
+                .on_hover_text(
+                    "Zeigt bei einer laufenden Übertragung dieses Programms (Senden/Nachladebetrieb) den bisher \
+                 übertragenen Stand. Das ist der Übertragungsstand, NICHT die Position der Maschine.",
+                );
+        }
         if app.sim.mode != 1 {
             ui.label(RichText::new("Tempo").monospace().color(DIM));
             let current = SPEEDS.get(app.sim.speed).map_or("", |s| s.0);

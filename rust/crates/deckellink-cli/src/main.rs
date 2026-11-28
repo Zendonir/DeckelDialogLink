@@ -293,6 +293,7 @@ fn lib_json(args: &[String]) -> Result<ExitCode, String> {
     let f64_of = |v: &serde_json::Value, key: &str| v.get(key).and_then(serde_json::Value::as_f64).unwrap_or(0.0);
     let i64_of = |v: &serde_json::Value, key: &str| v.get(key).and_then(serde_json::Value::as_i64).unwrap_or(0);
     let program = unhex(&str_of(&case, "program"));
+    let payload = unhex(&str_of(&case, "payload"));
     let name = str_of(&case, "name");
     let tools: Vec<Tool> = case
         .get("tools")
@@ -346,7 +347,8 @@ fn lib_json(args: &[String]) -> Result<ExitCode, String> {
         "{}",
         json!({"tools_used": used, "kind": kind.value(), "missing": missing, "problems": problems,
                "export": export, "meta": meta,
-               "stem": deckellink_core::library::library_stem(&name, "PROGRAMM")})
+               "stem": deckellink_core::library::library_stem(&name, "PROGRAMM"),
+               "linemap": deckellink_core::nc::linemap::map_payload_lines(&program, &payload)})
     );
     Ok(ExitCode::SUCCESS)
 }

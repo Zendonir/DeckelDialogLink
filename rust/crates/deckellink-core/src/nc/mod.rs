@@ -2,6 +2,7 @@
 
 pub mod analyzer;
 pub mod checks;
+pub mod linemap;
 pub mod transformer;
 
 use crate::nc::checks::EndingCounts;

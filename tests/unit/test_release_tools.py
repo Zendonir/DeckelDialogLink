@@ -43,3 +43,18 @@ def test_installer_script_consistent() -> None:
     assert "OutputBaseFilename={#AppName}-{#AppVersion}-Setup-x64" in script
     assert "LOCALAPPDATA%\\DeckelLink" in script  # user data is documented as preserved
     assert (ROOT / "installer" / "info_before_de.txt").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_rust_release_notes_match_cargo_version() -> None:
+    import re
+
+    tool = load_tool()
+    cargo = (ROOT / "rust" / "Cargo.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version = "(.+)"', cargo, re.MULTILINE)
+    assert match is not None
+    version = match.group(1)
+    notes = tool.build_notes(version, (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), rust=True)
+    assert f"DeckelLink-Rust-{version}-Setup-x64.exe" in notes
+    assert "Rust-Neuentwicklung" in notes and "## Änderungen" in notes
+    iss = (ROOT / "installer" / "deckellink-rust.iss").read_text(encoding="utf-8")
+    assert "OutputBaseFilename=DeckelLink-Rust-{#AppVersion}-Setup-x64" in iss

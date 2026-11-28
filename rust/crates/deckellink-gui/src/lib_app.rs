@@ -351,6 +351,8 @@ impl DeckelApp {
                         let text = deckellink_core::library::decode_ascii(&data);
                         self.sim.load_text(text, &entry.name);
                         self.sim.library_entry = edit.then(|| entry.id.clone());
+                        self.sim.follow_path = Some(entry.path.clone());
+                        self.sim.follow_enabled = true;
                         self.sim.set_mode(if edit { 3 } else { 2 });
                         self.page = Page::Simulator;
                     }

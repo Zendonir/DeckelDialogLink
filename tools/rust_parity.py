@@ -741,6 +741,7 @@ LIB_PIECES = [
 
 
 def python_lib(case: dict[str, Any]) -> dict[str, Any]:
+    from deckellink.nc.linemap import map_payload_lines
     from deckellink.storage.files import sanitize_stem
     from deckellink.storage.library import LibraryEntry, guess_kind, tools_used
     from deckellink.storage.tooldb import (
@@ -781,6 +782,7 @@ def python_lib(case: dict[str, Any]) -> dict[str, Any]:
         "export": export,
         "meta": json.dumps(entry.to_meta(), ensure_ascii=False, indent=2),
         "stem": sanitize_stem(case["name"], "PROGRAMM"),
+        "linemap": map_payload_lines(program, bytes.fromhex(case["payload"])),
     }
 
 
@@ -805,8 +807,19 @@ def library_parity(cli: Path, tmp_dir: Path, cases: int, rng: random.Random) -> 
                     "note": rng.choice(["", "neu"]),
                 }
             )
+        lines = text.split("\r\n")
+        payload_lines = ["%"] if rng.random() < 0.5 else []
+        for line in lines:
+            roll = rng.random()
+            if roll < 0.15:
+                continue
+            payload_lines.append(line.strip() if roll < 0.6 else line)
+            if rng.random() < 0.05:
+                payload_lines.append("M30")
+        payload = rng.choice(["\r\n", "\n", "\r"]).join(payload_lines).encode("utf-8")
         case = {
             "program": program.hex(),
+            "payload": payload.hex(),
             "name": rng.choice(["TEIL 1.nc", "%%4", "Prog ä.1", "", "a" * 80, "__x__", "WERKZEUGE"]),
             "number": rng.choice(["", "17"]),
             "description": rng.choice(["", "Ölwanne ✓"]),

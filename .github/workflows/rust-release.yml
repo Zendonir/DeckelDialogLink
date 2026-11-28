@@ -1,0 +1,145 @@
+name: Rust release
+
+# Windows release build of the Rust version: tests, self test, installer (silent install,
+# self test, uninstall keeps user data), portable ZIP and checksums.
+# - workflow_dispatch: build only (artifact); with "publish" a GitHub pre-release
+#   "rust-v<version>" is created from the built files
+# - tag push "rust-v*": build and publish the pre-release
+
+on:
+  push:
+    tags: ["rust-v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "GitHub-Vorabrelease rust-v<Version> veröffentlichen"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Windows build, installer and checks
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Rust toolchain
+        run: rustup update stable && rustup default stable
+
+      - name: Determine version
+        id: meta
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path rust\Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "numeric=$(($version -split '-')[0])" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_REF -like "refs/tags/rust-v*") {
+            $tag = $env:GITHUB_REF_NAME.Substring(6)
+            if ($tag -ne $version) { throw "Tag rust-v$tag does not match rust/Cargo.toml ($version)" }
+          }
+          python tools/release_notes.py --rust $version > $null
+          if ($LASTEXITCODE -ne 0) { throw "CHANGELOG.md has no section 'Rust $version'" }
+
+      - name: Tests (no serial hardware required)
+        working-directory: rust
+        run: cargo test --all --locked
+
+      - name: Release build
+        working-directory: rust
+        run: cargo build --release --locked
+
+      - name: Smoke test (headless, simulation only)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath rust\target\release\deckellink.exe `
+            -ArgumentList "--smoke-test","--data-dir","$env:RUNNER_TEMP\dlr-smoke","--smoke-report","$env:RUNNER_TEMP\smoke.json" `
+            -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\smoke.json"
+          if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found" }
+          & $iscc "/DAppVersion=${{ steps.meta.outputs.version }}" "/DNumericVersion=${{ steps.meta.outputs.numeric }}" installer\deckellink-rust.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with $LASTEXITCODE" }
+
+      - name: Test installer (silent install, smoke test, uninstall keeps user data)
+        shell: pwsh
+        run: |
+          $setup = "dist\installer\DeckelLink-Rust-${{ steps.meta.outputs.version }}-Setup-x64.exe"
+          $dir = "$env:RUNNER_TEMP\dlr-install"
+          $p = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Setup failed with exit code $($p.ExitCode)" }
+          $exe = Join-Path $dir "deckellink.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test","--data-dir","$env:RUNNER_TEMP\dlr-installed","--smoke-report","$env:RUNNER_TEMP\installed.json" -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\installed.json"
+          if ($p.ExitCode -ne 0) { throw "Installed smoke test failed with exit code $($p.ExitCode)" }
+          $p = Start-Process -FilePath (Join-Path $dir "unins000.exe") -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Uninstall failed with exit code $($p.ExitCode)" }
+          Start-Sleep -Seconds 3
+          if (Test-Path $exe) { throw "Executable still present after uninstall" }
+          if (-not (Test-Path "$env:RUNNER_TEMP\dlr-installed\received")) { throw "User data was removed by uninstall" }
+
+      - name: Portable ZIP and checksums
+        shell: pwsh
+        run: |
+          $v = "${{ steps.meta.outputs.version }}"
+          $folder = "dist\DeckelLink-Rust"
+          New-Item -ItemType Directory -Force "$folder\docs", "$folder\licenses", release | Out-Null
+          Copy-Item rust\target\release\deckellink.exe, rust\target\release\deckellink-cli.exe, README.md, LICENSE, CHANGELOG.md $folder
+          Copy-Item rust\README.md "$folder\README-Rust.md"
+          Copy-Item docs\*.md "$folder\docs"
+          Copy-Item rust\crates\deckellink-gui\assets\fonts\LICENSE-*.txt "$folder\licenses"
+          Compress-Archive -Path $folder -DestinationPath "release\DeckelLink-Rust-$v-windows-x64.zip"
+          Copy-Item "dist\installer\DeckelLink-Rust-$v-Setup-x64.exe" release\
+          Get-ChildItem release -File | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+          } | Set-Content -Encoding ascii release\SHA256SUMS.txt
+          Get-Content release\SHA256SUMS.txt
+
+      - name: Upload release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: DeckelLink-Rust-${{ steps.meta.outputs.version }}-windows-x64
+          path: release/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub pre-release rust-v<version>
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/rust-v') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Release notes from CHANGELOG
+        run: python3 tools/release_notes.py --rust "${{ needs.build.outputs.version }}" > release-notes.md
+
+      - name: Publish GitHub pre-release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: rust-v${{ needs.build.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: DeckelLink (Rust) ${{ needs.build.outputs.version }}
+          body_path: release-notes.md
+          files: release/*
+          draft: false
+          prerelease: true

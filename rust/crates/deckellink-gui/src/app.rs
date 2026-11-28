@@ -239,6 +239,9 @@ pub struct DeckelApp {
     pub library: deckellink_core::library::ProgramLibrary,
     pub tool_db: deckellink_core::tooldb::ToolDatabase,
     pub lib: crate::lib_app::LibState,
+    /// Program being sent and payload line -> original line (simulator follow-up).
+    pub sending_path: Option<PathBuf>,
+    pub send_line_map: Vec<usize>,
 }
 
 impl std::fmt::Debug for DeckelApp {
@@ -316,6 +319,8 @@ impl DeckelApp {
             library,
             tool_db,
             lib: crate::lib_app::LibState::default(),
+            sending_path: None,
+            send_line_map: Vec::new(),
             config,
         };
         app.refresh_archive();
@@ -671,6 +676,10 @@ impl DeckelApp {
         }
         let profile = self.profile.clone();
         let name = program.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        let line_map = deckellink_core::nc::linemap::map_payload_lines(&program.original, &payload.data);
+        let sending_path = program.path.clone();
+        self.sending_path = Some(sending_path);
+        self.send_line_map = line_map;
         self.log.info(format!(
             "Übertragung bestätigt: Datei {} Modus {} Nachladebetrieb {} Port {} Profil {}",
             program.file_name(),
@@ -792,6 +801,7 @@ impl DeckelApp {
                 if matches!(kind, TaskKind::ParamWrite) {
                     self.param.progress = Some(progress);
                 } else {
+                    self.follow_in_simulator(progress.current_line);
                     self.send_progress = Some(progress);
                 }
             }

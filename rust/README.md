@@ -99,7 +99,9 @@ Außerdem enthält die Oberfläche:
 - **Werkzeugtabelle** (`tools.json`, Sicherung vor jedem Speichern) für Simulator und Werkzeugprüfung; Werkzeugdatei nur aus einer selbst eingerichteten Vorlage (Format der DIALOG 11 nicht verifiziert).
 - **Windows-Installer** `installer/deckellink-rust.iss` (siehe `docs/INSTALLATION.md`), Selbsttest `deckellink --smoke-test`.
 
-Noch nicht in Rust: „Übertragung mitverfolgen“ im Simulator.
+- **Übertragung mitverfolgen:** Der Simulator zeigt beim Senden des geöffneten Programms den übertragenen Stand (nur Anzeige, nicht die Maschinenposition).
+
+Release: Workflow `.github/workflows/rust-release.yml` (Tag `rust-v<Version>` = Version in `rust/Cargo.toml`) baut Installer, portables ZIP und Prüfsummen und veröffentlicht ein Vorabrelease.
 
 Tests:
 - `tests/flows.rs` prüft die Abläufe ohne Fenster: Jedes Bild wird mit egui gezeichnet, die Aktionen sind dieselben wie bei den Schaltflächen.
@@ -162,4 +164,4 @@ cargo build --release      # target/release/deckellink(.exe) und deckellink-cli(
 | 5 | DIALOG-11-Simulator mit Grafik und Steuerungsmenüs; Gleichwertigkeit für das Demoprogramm und Zufallsprogramme (Bahnen, Meldungen, Zustände, Parameter) | **fertig** |
 | 6 | Programm- und Werkzeugverwaltung, Windows-Installer mit Selbsttest; Gleichwertigkeit für Werkzeugaufrufe, Dateiart, Metadaten und Werkzeugdatei-Vorlage | **fertig** |
 
-Mit Etappe 6 hat die Rust-Version den Funktionsumfang der Python-Version (bis auf „Übertragung mitverfolgen“ im Simulator). Bis zur Prüfung an der FP2A und der Freigabe durch den Anwender bleibt die Python-Version die Referenz.
+Mit Etappe 6 hat die Rust-Version den vollen Funktionsumfang der Python-Version. Bis zur Prüfung an der FP2A und der Freigabe durch den Anwender bleibt die Python-Version die Referenz.

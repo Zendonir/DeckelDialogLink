@@ -2,6 +2,17 @@
 
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Rust 0.8.0-alpha.10] – 2026-11-28
+
+### Neu (Rust)
+- **Übertragung mitverfolgen** im Simulator, wie in der Python-Version. Wird das im Simulator geöffnete Programm gesendet (auch im Nachladebetrieb), springt die Anzeige auf den bisher übertragenen Stand: Satz markiert, Moduszeile „ÜBERTRAGEN BIS ZEILE n“. Das ist der Übertragungsstand, nicht die Position der Maschine, und es startet keinen Testlauf. Abschaltbar über das Kästchen in der Bedienzeile.
+- Zuordnung Sendezeile → Originalzeile (`nc/linemap.rs`) mit Gleichwertigkeitstest gegen Python (0 Abweichungen).
+- **Release-Workflow** `rust-release.yml`:
+  - Windows-Build mit allen Tests, Selbsttest, Installer-Test (still installieren, Selbsttest, deinstallieren, Nutzerdaten bleiben), portablem ZIP und `SHA256SUMS.txt`.
+  - Ein Tag `rust-v<Version>` veröffentlicht daraus ein GitHub-Vorabrelease mit den Notizen aus diesem CHANGELOG.
+
+Damit hat die Rust-Version den vollen Funktionsumfang der Python-Version.
+
 ## [Rust 0.8.0-alpha.9] – 2026-11-28
 
 ### Neu (Rust, Etappe 6)
